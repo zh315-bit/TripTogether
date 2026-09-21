@@ -1,0 +1,32 @@
+# Python environments and generated files
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+coverage/
+htmlcov/
+*.egg-info/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Frontend dependencies, build output, and local configuration
+frontend/node_modules/
+frontend/dist/
+node_modules/
+dist/
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# Editor and macOS files
+.idea/
+.vscode/
+.DS_Store
+._*

@@ -1,0 +1,1 @@
+"""TripTogether backend application."""
