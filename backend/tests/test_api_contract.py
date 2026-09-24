@@ -58,7 +58,15 @@ def test_openapi_is_complete_and_unique():
         assert op["tags"] and op["summary"]
         for status, response in op["responses"].items():
             if int(status) >= 400:
-                assert response["content"]["application/json"]["schema"]["$ref"].endswith("/APIErrorResponse")
+                expected_ref = "#/components/schemas/APIErrorResponse"
+                actual_ref = (
+                    response.get("content", {}).get("application/json", {})
+                    .get("schema", {}).get("$ref", "<missing>")
+                )
+                assert actual_ref == expected_ref, (
+                    f"{method.upper()} {path} status {status}: "
+                    f"expected {expected_ref}, got {actual_ref}"
+                )
         if method == "delete":
             assert "content" not in op["responses"]["204"]
         if path.startswith(PREFIX) and path not in (PREFIX + "/auth/register", PREFIX + "/auth/login"):
