@@ -6,7 +6,9 @@ TripTogether is a full-stack collaborative travel-planning application for small
 
 ## Overview
 
-This is a portfolio-ready MVP, not a deployed service. The application deliberately keeps the domain small: plan together, travel together, and settle fairly.
+This is a deployed portfolio MVP. The application deliberately keeps the domain small: plan together, travel together, and settle fairly.
+
+**Live Demo:** [TripTogether](https://trip-together-zeta.vercel.app) · [API health](https://triptogether-api.onrender.com/health)
 
 ## Features
 
@@ -25,7 +27,7 @@ This is a portfolio-ready MVP, not a deployed service. The application deliberat
 
 **Authentication:** JWT and Argon2id password hashing.
 
-**Planned deployment:** Vercel (frontend), Render (FastAPI), and managed PostgreSQL — deployment in progress.
+**Deployment:** Vercel (frontend), Render (FastAPI), and Render PostgreSQL.
 
 ## Architecture
 
@@ -72,7 +74,7 @@ The root `.env` configures the server: `DATABASE_URL`, `JWT_SECRET_KEY`, `JWT_AL
 
 ## Deployment
 
-TripTogether is prepared for deployment but is not deployed. A production release consists of a static frontend build, one or more non-reloading FastAPI processes, and a hosted PostgreSQL database. The browser calls the backend's public HTTPS origin; the backend connects to PostgreSQL through its private or provider-managed connection string.
+TripTogether is deployed with a static frontend build, a non-reloading FastAPI process, and hosted PostgreSQL. The browser calls the backend's public HTTPS origin; the backend connects to PostgreSQL through its private connection string. The project owner confirmed production registration after migration to `0005 (head)`.
 
 ```text
 Browser → static frontend → public HTTPS API → hosted PostgreSQL
@@ -96,7 +98,13 @@ Keep these values in the deployment platform's secret/configuration store. `.env
 
 ### Migration and Startup Strategy
 
-Run `alembic upgrade head` once as a controlled release job before starting or rolling new backend workers. Do not let every backend replica run migrations on boot. After the migration succeeds, start the API without reload:
+Run `alembic upgrade head` once as a controlled release step for a new database
+or schema update, before validating business traffic. Do not let every backend
+replica run migrations on boot. Render Free does not offer a Pre-Deploy Command:
+run the migration manually from a trusted environment with the Render database
+URL supplied through an environment variable, then verify `alembic current`
+reports `0005 (head)`. Never paste the URL into a committed file or shell
+command history. After the migration succeeds, start the API without reload:
 
 ```bash
 cd backend
@@ -104,7 +112,10 @@ APP_ENV=production python -m alembic upgrade head
 APP_ENV=production /path/to/venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
 ```
 
-`/health` is a liveness endpoint and does not require database access. `/ready` validates the JWT configuration and executes PostgreSQL `SELECT 1`; use it for readiness checks after migrations complete.
+`/health` is a liveness endpoint and does not require database access. `/ready`
+validates JWT configuration, PostgreSQL connectivity, the current Alembic head,
+and all seven core tables. It returns 503 until the schema is complete, so use
+it for readiness checks after migrations finish.
 
 ### CORS
 
@@ -149,15 +160,15 @@ APP_ENV=development CORS_ORIGINS='["http://127.0.0.1:4173"]' \
 
 Verify `/health`, `/ready`, registration, login, trip creation, invitations, itinerary changes, expenses, balances, and settlement suggestions. Use the existing PostgreSQL verification scripts for disposable end-to-end test data.
 
-### Step 19A Platform Plan: Vercel + Render
+### Platform Configuration: Vercel + Render
 
-The planned frontend host is Vercel with `frontend` as the Root Directory,
+The frontend runs on Vercel with `frontend` as the Root Directory,
 Node `24.x`, `npm run build`, and `dist` as the Output Directory.
 `frontend/vercel.json` rewrites all paths to `index.html`, preserving direct
 React Router access to `/login`, `/register`, `/trips`, `/account`, and
 `/trips/:id`.
 
-The planned backend host is a Render Python Web Service with `backend` as the
+The backend runs on a Render Python Web Service with `backend` as the
 Root Directory, build command `pip install -r requirements.txt`, start command
 `uvicorn app.main:app --host 0.0.0.0 --port $PORT`, and HTTP health check
 `/ready`. Use Render Postgres's internal connection URL when both services are
@@ -171,6 +182,8 @@ recommended persistent portfolio choice. Neon Postgres is a simple lower-cost
 prototype alternative after reviewing its current plan limits. See the
 [deployment checklist](docs/deployment-checklist.md) for the exact manual
 sequence, secret handling, migration procedure, CORS sequence, and smoke test.
+The complete Step 20A handoff, including the Render/Vercel fields and
+troubleshooting flow, is in the [production deployment runbook](docs/step20-production-deployment.md).
 
 ## Testing
 
@@ -198,7 +211,7 @@ The verification scripts create random disposable users and clean them up. They 
 
 ## Known Limitations
 
-- No deployment, OAuth, refresh tokens, payments, maps, booking, chat, or live updates.
+- No OAuth, refresh tokens, payments, maps, booking, chat, or live updates.
 - Logout clears the local token; server-side revocation is not implemented.
 - Backend authorization remains the source of truth; hidden browser controls are UX only.
 
@@ -210,19 +223,26 @@ The React client now uses a consistent, light-blue travel workspace: a compact a
 
 The design keeps the existing functional states visible: loading and error messages use semantic status roles, empty dashboards point users to the relevant next action, invitations retain server-authorized actions, and financial values are rendered directly from backend responses. Buttons, fields, cards, tabs, and member rows share the same spacing, borders, focus treatment, and mobile breakpoints.
 
-Screenshot placeholder: add a verified local or deployed browser capture here when publishing the portfolio demo.
-
 ## Screenshots
 
-Production screenshots are not available yet. After deployment, add verified captures to `docs/screenshots/` for:
+Real screenshots from the production application:
 
-- Landing Page
-- Trip Dashboard
-- Trip Detail and Shared Itinerary
-- Expenses, Balances, and Settlement Suggestions
+### Landing Page
 
-Do not use mock or fabricated screenshots in the public repository.
+![TripTogether landing page](docs/screenshots/landing-page.png)
+
+### Trip Overview
+
+![TripTogether trip overview](docs/screenshots/trip-overview.png)
+
+### Trip Members
+
+![TripTogether trip members](docs/screenshots/trip-members.png)
+
+### Expenses & Balances
+
+![TripTogether expenses and balances](docs/screenshots/expenses-balances.png)
 
 ## Future Improvements
 
-After deployment planning, consider rate limiting, token revocation, observability, real-browser accessibility testing, and CI. These are intentionally outside this MVP polish step.
+Future work may include rate limiting, token revocation, observability, real-browser accessibility testing, and CI. These are outside this hardening task.
