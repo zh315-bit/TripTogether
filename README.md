@@ -100,11 +100,12 @@ Keep these values in the deployment platform's secret/configuration store. `.env
 
 Run `alembic upgrade head` once as a controlled release step for a new database
 or schema update, before validating business traffic. Do not let every backend
-replica run migrations on boot. Render Free does not offer a Pre-Deploy Command:
+replica run migrations on boot. On a Render plan with a Pre-Deploy Command, use
+it as one controlled migration step. Render Free has no Pre-Deploy Command, so
 run the migration manually from a trusted environment with the Render database
-URL supplied through an environment variable, then verify `alembic current`
-reports `0005 (head)`. Never paste the URL into a committed file or shell
-command history. After the migration succeeds, start the API without reload:
+URL supplied as an environment variable. Verify `alembic current` reports
+`0005 (head)` for this release. Never put the URL in a committed file or shell
+history. After migration succeeds, start the API without reload:
 
 ```bash
 cd backend
@@ -112,10 +113,11 @@ APP_ENV=production python -m alembic upgrade head
 APP_ENV=production /path/to/venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
 ```
 
-`/health` is a liveness endpoint and does not require database access. `/ready`
-validates JWT configuration, PostgreSQL connectivity, the current Alembic head,
-and all seven core tables. It returns 503 until the schema is complete, so use
-it for readiness checks after migrations finish.
+`/health` is a liveness endpoint and never accesses the database. `/ready`
+validates JWT configuration, PostgreSQL connectivity, that the database
+revision matches the application's single Alembic head, and that all seven
+core tables exist. It returns 503 until every check passes; use it for
+readiness checks after the controlled migration finishes.
 
 ### CORS
 
@@ -201,11 +203,15 @@ python -m pytest -q
 RUN_POSTGRES_TESTS=1 python -m pytest -q
 
 # opt-in real PostgreSQL / FastAPI checks from repository root
-/private/tmp/triptogether-step1-venv/bin/python frontend/scripts/verify_auth.py
-/private/tmp/triptogether-step1-venv/bin/python frontend/scripts/verify_trips.py
-/private/tmp/triptogether-step1-venv/bin/python frontend/scripts/verify_collaboration.py
-/private/tmp/triptogether-step1-venv/bin/python frontend/scripts/verify_finance.py
+python frontend/scripts/verify_auth.py
+python frontend/scripts/verify_trips.py
+python frontend/scripts/verify_collaboration.py
+python frontend/scripts/verify_finance.py
 ```
+
+GitHub Actions runs the backend suite, including its PostgreSQL integration
+tests against a disposable PostgreSQL service, and runs the frontend tests,
+lint, typecheck, and production build. CI uses no production credentials.
 
 The verification scripts create random disposable users and clean them up. They require a migrated PostgreSQL database; they never substitute SQLite.
 

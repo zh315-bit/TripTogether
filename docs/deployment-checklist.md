@@ -38,13 +38,19 @@ credential, account, or deployment command that creates cloud resources.
    python -c "import secrets; print(secrets.token_urlsafe(48))"
    ```
 
-6. Run `alembic upgrade head` once before normal traffic. On a paid Render Web
-   Service, configure it as the pre-deploy command. On a free service, shell and
-   one-off jobs are unavailable; use an intentionally controlled migration
-   release process after choosing a plan, rather than placing migration in the
-   web start command.
-7. Set Render's HTTP health check path to `/ready`. It verifies both JWT
-   configuration and PostgreSQL connectivity; `/health` is liveness only.
+6. For a new database or schema change, run `APP_ENV=production python -m alembic
+   upgrade head` exactly once as a controlled release step before validating
+   business traffic. On a Render plan with a Pre-Deploy Command, configure this
+   as the single migration command. Render Free has no Pre-Deploy Command, so
+   run it manually from a trusted environment using the Render database URL;
+   do not store that URL in the repository or shell history. Then run
+   `python -m alembic current` and confirm `0005 (head)` for this release. Never
+   put migrations in the web start command or run them in each worker.
+7. Set Render's HTTP health check path to `/ready`. It verifies JWT
+   configuration, PostgreSQL connectivity, that the database revision matches
+   the application's single Alembic head, and that all seven core tables
+   exist. `/health` is liveness only and never accesses the database. A 503
+   means readiness checks failed.
 8. After Render reports healthy, record its HTTPS `onrender.com` API origin.
 9. In Vercel, import the repository with root directory `frontend`. Vercel will
    use Node `24.x`, `npm run build`, and `dist`; `frontend/vercel.json` supplies

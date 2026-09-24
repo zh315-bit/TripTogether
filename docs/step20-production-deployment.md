@@ -53,8 +53,8 @@ driver. Local development URLs are unchanged.
 
 ## Controlled migration
 
-After `DATABASE_URL` is configured, run this exactly once per release before
-starting or scaling API workers:
+For a new database or schema change, run this exactly once as a controlled
+release step before validating business traffic or starting/scaling API workers:
 
 ```bash
 cd backend
@@ -62,16 +62,18 @@ APP_ENV=production python -m alembic upgrade head
 ```
 
 Render Free has no Pre-Deploy Command. For that plan, run the migration manually
-from a trusted local environment with the Render database's external URL in
-`DATABASE_URL`, then unset it. Do not save the URL in the repository or shell
-history. On a plan that supports it, use a single pre-deploy release command.
-Check `python -m alembic current` after the migration; this release expects
-`0005 (head)`. Do not put `alembic upgrade head` in the web-service start
-command, because multiple workers could race to migrate.
+from a trusted environment with the Render database URL supplied as
+`DATABASE_URL`; do not save the URL in the repository or shell history. On a
+Render plan that supports Pre-Deploy Command, configure this as the one
+controlled migration command. Check `python -m alembic current` after the
+migration; this release expects `0005 (head)`. Do not put `alembic upgrade head`
+in the web-service start command or run it independently in each worker.
 
 Set Render's health check path to `/ready`. It verifies JWT configuration,
-PostgreSQL connectivity, the Alembic head, and the seven core tables. `/health`
-is liveness-only and stays 200 even when the schema is not ready.
+PostgreSQL connectivity, that the database revision matches the application's
+single Alembic head, and that all seven core tables exist. `/health` is
+liveness-only, never accesses the database, and stays 200 even when the schema
+is not ready. `/ready` returns 503 when any readiness check fails.
 
 ## Vercel frontend
 

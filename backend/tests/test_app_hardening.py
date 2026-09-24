@@ -5,8 +5,10 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from app.core import config
+from app.api import system
 from app.db import session as database
 from app.db.session import get_db
 from app.main import create_app
@@ -81,10 +83,12 @@ def test_cors_401_and_disallowed_method(settings_env):
 
 
 @pytest.mark.parametrize("broken", [False, True])
-def test_readiness_and_liveness(settings_env, jwt_environment, broken, caplog):
+def test_readiness_and_liveness(settings_env, jwt_environment, broken, caplog, monkeypatch):
     application = create_app()
     db = MagicMock(spec=Session)
     db.execute.return_value.scalar_one.return_value = 1
+    checked_schema = MagicMock()
+    monkeypatch.setattr(system, "check_schema", checked_schema)
     if broken:
         db.execute.side_effect = OperationalError("secret SQL", {}, Exception("private-password"))
     application.dependency_overrides[get_db] = lambda: db
@@ -95,8 +99,10 @@ def test_readiness_and_liveness(settings_env, jwt_environment, broken, caplog):
         if broken:
             error_contract(response, 503, "NOT_READY")
             db.rollback.assert_called_once()
+            checked_schema.assert_not_called()
         else:
             assert response.status_code == 200 and response.json() == {"status": "ready"}
+            checked_schema.assert_called_once_with(db)
     assert "private-password" not in caplog.text + response.text
     assert "Application startup" in caplog.text and "Application shutdown" in caplog.text
 
@@ -179,3 +185,36 @@ def test_real_postgres_readiness(registration_client, jwt_environment):
     response = client.get("/ready")
     assert response.status_code == 200
     assert response.json() == {"status": "ready"}
+
+
+@pytest.mark.parametrize("missing_table", [
+    "users", "trips", "trip_members", "trip_invitations",
+    "itinerary_items", "expenses", "expense_splits",
+])
+def test_readiness_rejects_missing_core_table(
+    registration_client, jwt_environment, missing_table,
+):
+    client, connection, _ = registration_client
+    connection.execute(text(f'DROP TABLE "{missing_table}" CASCADE'))
+    error_contract(client.get("/ready"), 503, "NOT_READY")
+    assert client.get("/health").json() == {"status": "ok"}
+
+
+@pytest.mark.parametrize("revision", ["0004", None])
+def test_readiness_rejects_wrong_or_missing_revision(
+    registration_client, jwt_environment, revision,
+):
+    client, connection, _ = registration_client
+    connection.execute(text("DELETE FROM alembic_version"))
+    if revision is not None:
+        connection.execute(text("INSERT INTO alembic_version (version_num) VALUES (:revision)"),
+                           {"revision": revision})
+    error_contract(client.get("/ready"), 503, "NOT_READY")
+    assert client.get("/health").json() == {"status": "ok"}
+
+
+def test_readiness_rejects_missing_version_table(registration_client, jwt_environment):
+    client, connection, _ = registration_client
+    connection.execute(text("DROP TABLE alembic_version"))
+    error_contract(client.get("/ready"), 503, "NOT_READY")
+    assert client.get("/health").json() == {"status": "ok"}

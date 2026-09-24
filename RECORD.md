@@ -3284,3 +3284,124 @@ human check of exactly what will become public.
 ### Next Step
 
 Step 19B.2 — Push Repository to GitHub. Recommended only; do not begin automatically.
+
+## 2026-09-22 — Step 20A: Production Deployment Preparation
+
+### What Was Implemented
+
+Performed the final production preflight without accessing Render, Vercel, or
+creating any cloud resource. Added `docs/step20-production-deployment.md`, a
+manual runbook for the planned Vercel SPA → Render FastAPI → Render PostgreSQL
+release. It records the exact root directories, build/start commands,
+environment-variable ownership, single-release Alembic migration procedure,
+readiness health check, CORS handoff, acceptance checklist, and common failure
+diagnostics.
+
+### Production Readiness
+
+- **Production readiness:** PASS.
+- **Render ready:** YES — `backend` root, `pip install -r requirements.txt`,
+  `uvicorn app.main:app --host 0.0.0.0 --port $PORT`, `/ready`, environment-only
+  configuration, and standard provider PostgreSQL URL normalization are ready.
+- **Vercel ready:** YES — `frontend` root, Node 24, `npm run build`, `dist`,
+  build-time `VITE_API_BASE_URL`, and SPA rewrite are ready.
+- **Secrets exposed:** NO — the repository tracks examples only; local `.env`
+  paths remain ignored and the preflight secret-pattern scan found no private
+  key or common token pattern.
+- **Migration ready:** YES — migration history is unchanged and `alembic check`
+  reports no pending upgrade operations.
+
+### Verification
+
+Frontend verification passed: **80 passed, 1 skipped**; ESLint, TypeScript
+typecheck, and Vite production build all passed. A fresh temporary Python
+environment installed `backend/requirements.txt`; backend regression passed
+with **356 passed, 184 skipped**, `alembic check` found no new upgrade
+operations, and `pip check` found no broken requirements. The opted-in real
+PostgreSQL suite also completed successfully. The system Python did not have a
+`python` alias or test dependencies, so the checks intentionally used a fresh
+temporary environment outside the repository.
+
+The first PostgreSQL-suite attempt inside the restricted sandbox could not open
+the local `5432` connection and therefore reported environment-level connection
+errors. The same opted-in suite was rerun with explicit local-database access
+and completed successfully; no application code change was needed.
+
+The documented production-mode Uvicorn command was also started locally
+without reload using an explicit temporary port and an HTTPS CORS origin;
+`/health` returned `{"status":"ok"}` and `/ready` returned
+`{"status":"ready"}`. The temporary process was stopped after verification.
+
+### Manual Actions Required
+
+The project owner must still complete the irreversible platform work: create
+Render PostgreSQL, create/configure the Render Web Service, enter the real
+database/JWT values in Render, run migrations in a controlled release step,
+import the repository in Vercel, set the public API origin, then set the exact
+Vercel CORS origin and perform the public smoke test. No real URL may be added
+to the README until those steps succeed.
+
+### Next Step
+
+Complete the manual deployment flow in
+`docs/step20-production-deployment.md`. Do not begin a feature-development
+step automatically.
+
+## 2026-09-24 — Production Registration Incident and Readiness Hardening
+
+### Incident and Root Cause
+
+Production registration returned 503 `REGISTRATION_UNAVAILABLE` while Render
+PostgreSQL was missing the `users` table. PostgreSQL logs showed
+`relation "users" does not exist` at the same timestamps as the API's generic
+`Service unavailable` entries. `/ready` returned 200 because it checked only
+JWT configuration and `SELECT 1`, which did not prove migrations had run.
+The owner subsequently confirmed production Alembic revision `0005 (head)`,
+all eight expected tables (including `alembic_version`), and a successful
+production registration. No production test account was created in this task.
+
+### Fix
+
+`/ready` now compares the database's `alembic_version` with the single head
+shipped in `backend/migrations/` and verifies the seven business tables in the
+current PostgreSQL schema. Missing/wrong revision, missing table, or database
+failure returns the existing safe 503 `NOT_READY` envelope; `/health` remains
+independent of the database. Errors and logs do not include the database URL,
+credentials, SQL parameters, or raw SQL exceptions. No migration or business
+domain logic was changed.
+
+README and deployment docs now state that every new production database or
+schema update needs one controlled `alembic upgrade head` before business
+traffic verification. Render Free has no Pre-Deploy Command, so its migration
+must be run manually from a trusted environment with an external database URL
+held only in an environment variable. Migrations remain outside Uvicorn worker
+startup. README now identifies the public Vercel/Render deployment accurately.
+The readiness code requires a Render redeploy before it is active in production.
+
+### Verification
+
+- Backend default suite: 356 passed, 194 PostgreSQL-gated tests skipped.
+- Real local PostgreSQL suite: 550 passed, including migrated readiness,
+  every missing core table, missing/wrong Alembic revision, and the existing
+  Register → Login → `/auth/me` flow in an isolated rolled-back schema.
+- `alembic check`: no new upgrade operations; `pip check`: no broken requirements.
+- Frontend: 80 passed, 1 skipped; lint, typecheck, and production build passed.
+- No new production data was created and no cloud deployment was performed.
+
+## 2026-09-24 — Final Repository Hardening
+
+- Added `backend/tests/test_readiness_check.py` unit coverage for the expected
+  Alembic head and each required core table; the PostgreSQL integration tests
+  in `test_app_hardening.py` exercise complete schema, connection failure,
+  missing tables, and missing/wrong revisions.
+- Added `.github/workflows/ci.yml`. Its backend job uses a disposable
+  PostgreSQL 16 service and runs opt-in integration tests. Its frontend job
+  runs tests, lint, typecheck, and build. CI has no production secrets.
+- Unified `/health`, `/ready`, and controlled migration documentation across
+  README and both deployment guides. Replaced the obsolete temporary Python
+  executable path in README with the generic `python` command.
+- Local verification: backend 366 passed, 194 PostgreSQL-gated tests skipped
+  because no local PostgreSQL server was running; frontend 80 passed, 1
+  skipped; lint, typecheck, production build, and `git diff --check` passed.
+- The production Vercel and Render health URLs returned HTTP 200, and all local
+  README documentation and screenshot links resolve in the repository.

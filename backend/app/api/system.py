@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, APIErrorResponse
 from app.core.config import get_jwt_settings
-from app.db.check import check_connection
+from app.db.check import check_connection, check_schema
 from app.db.session import get_db
 
 
@@ -31,13 +31,14 @@ async def health() -> HealthResponse:
 
 
 @router.get("/ready", response_model=ReadinessResponse, summary="Application readiness",
-            description="Validates JWT configuration and executes PostgreSQL SELECT 1; no schema audit.",
+            description="Validates JWT configuration, PostgreSQL connectivity, migration revision, and core tables.",
             responses={503: {"model": APIErrorResponse}})
 def ready(response: Response, db: Session = Depends(get_db)) -> ReadinessResponse:
     response.headers["Cache-Control"] = "no-store"
     try:
         get_jwt_settings()
         check_connection(db)
+        check_schema(db)
     except (ValueError, RuntimeError, SQLAlchemyError):
         db.rollback()
         logger.error("Readiness check failed")
