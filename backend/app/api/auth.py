@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
-from app.api.errors import APIError, ErrorResponse, ValidationErrorResponse
+from app.api.errors import APIError, APIErrorResponse
 from app.api.dependencies import get_current_user, unauthorized
 from app.core.config import JWTConfigurationError
 from app.core.security import create_access_token
@@ -28,9 +28,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
     responses={
-        409: {"model": ErrorResponse},
-        422: {"model": ValidationErrorResponse},
-        503: {"model": ErrorResponse},
+        409: {"model": APIErrorResponse},
+        422: {"model": APIErrorResponse},
+        503: {"model": APIErrorResponse},
     },
 )
 def register(payload: UserRegister, db: Session = Depends(get_db)) -> UserResponse:
@@ -49,9 +49,9 @@ def register(payload: UserRegister, db: Session = Depends(get_db)) -> UserRespon
     "/login",
     response_model=TokenResponse,
     responses={
-        401: {"model": ErrorResponse},
-        422: {"model": ValidationErrorResponse},
-        503: {"model": ErrorResponse},
+        401: {"model": APIErrorResponse},
+        422: {"model": APIErrorResponse},
+        503: {"model": APIErrorResponse},
     },
 )
 def login(
@@ -72,7 +72,7 @@ def login(
 
 @router.get(
     "/me", response_model=UserResponse,
-    responses={401: {"model": ErrorResponse}, 503: {"model": ErrorResponse}},
+    responses={401: {"model": APIErrorResponse}, 503: {"model": APIErrorResponse}},
 )
 def me(response: Response, current_user: User = Depends(get_current_user)) -> UserResponse:
     response.headers["Cache-Control"] = "no-store"

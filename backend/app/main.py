@@ -67,9 +67,7 @@ def create_app() -> FastAPI:
         versioned.include_router(router)
     # Existing routers describe legacy errors; v1 documents the new envelope.
     for route in versioned.routes:
-        # Every route in this router is versioned; don't depend on when FastAPI
-        # applies the parent prefix to route.path while composing routers.
-        if isinstance(route, APIRoute):
+        if isinstance(route, APIRoute) and route.path.startswith("/api/v1/"):
             for status in set(route.responses) | {500, 503}:
                 if int(status) >= 400:
                     route.responses[status] = {"model": APIErrorResponse}

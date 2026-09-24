@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user
-from app.api.errors import APIError, ErrorResponse, ValidationErrorResponse
+from app.api.errors import APIError, APIErrorResponse
 from app.api.trips import TripID, trip_http_errors
 from app.db.session import get_db
 from app.models import User
@@ -14,9 +14,9 @@ from app.services import expenses
 
 
 router = APIRouter(prefix="/trips/{trip_id}/expenses", tags=["expenses"], responses={
-    401: {"model": ErrorResponse}, 404: {"model": ErrorResponse},
-    409: {"model": ErrorResponse}, 422: {"model": ValidationErrorResponse},
-    503: {"model": ErrorResponse},
+    401: {"model": APIErrorResponse}, 404: {"model": APIErrorResponse},
+    409: {"model": APIErrorResponse}, 422: {"model": APIErrorResponse},
+    503: {"model": APIErrorResponse},
 })
 
 

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Path, Response
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user
-from app.api.errors import APIError, ErrorResponse, ValidationErrorResponse
+from app.api.errors import APIError, APIErrorResponse
 from app.db.session import get_db
 from app.models import User
 from app.schemas.trip import TripCreate, TripResponse, TripUpdate
@@ -17,11 +17,11 @@ from app.services import trips
 router = APIRouter(
     prefix="/trips", tags=["trips"],
     responses={
-        401: {"model": ErrorResponse},
-        404: {"model": ErrorResponse},
-        409: {"model": ErrorResponse},
-        422: {"model": ValidationErrorResponse},
-        503: {"model": ErrorResponse},
+        401: {"model": APIErrorResponse},
+        404: {"model": APIErrorResponse},
+        409: {"model": APIErrorResponse},
+        422: {"model": APIErrorResponse},
+        503: {"model": APIErrorResponse},
     },
 )
 TripID = Annotated[int, Path(ge=1, le=2147483647)]
