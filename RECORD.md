@@ -3405,3 +3405,98 @@ The readiness code requires a Render redeploy before it is active in production.
   skipped; lint, typecheck, production build, and `git diff --check` passed.
 - The production Vercel and Render health URLs returned HTTP 200, and all local
   README documentation and screenshot links resolve in the repository.
+
+## 2026-10-13 — Collaborative Map P1: Places and Itinerary Associations
+
+### What Was Implemented
+
+Added trip_places storage, nullable itinerary_items.place_id, database integrity
+constraints, Alembic revision 0006 (after inspecting head 0005), and readiness
+table coverage. No API, geocoding, frontend or route optimization was added.
+The revised plan was not saved as text; the user supplied the final P1 field
+definitions in this chat and authorized compatibility choices.
+
+### Files to Review
+
+- `backend/app/models/trip_place.py`
+- `backend/app/models/itinerary_item.py`
+- `backend/app/models/__init__.py`
+- `backend/migrations/versions/0006_add_trip_places_and_itinerary_associations.py`
+- `backend/app/db/check.py`
+- `backend/requirements.txt`
+- `backend/tests/test_trip_place_migrations.py`
+- Existing user, trip, itinerary and expense migration tests: updated expected
+  head/table/column counts while retaining their original constraint tests.
+- `docs/map-p1-review.md`: complete schema, compatibility decisions and commands.
+
+### Key Code to Understand
+
+FOREIGN KEY(trip_id, place_id) references trip_places(trip_id, id), backed by a
+non-deferrable composite unique constraint. ON DELETE SET NULL (place_id) only
+clears the association; it preserves trip_id, location and the itinerary row.
+Trip deletion cascades to both places and itinerary items. Provider identifiers
+are unique per Trip/provider when non-NULL; manual NULL identifiers may repeat.
+Coordinates are required Numeric(9,6) values with range checks. New IDs remain
+Integer/Identity because the repository has no UUID keys/generator to reuse.
+Timestamps retain the existing server default and SQLAlchemy update convention.
+
+### Architecture Concept
+
+Database constraints protect consistency even for direct SQL writes. They do
+not replace authorization: P2 must retain existing service membership/ownership
+checks and scope every place lookup by trip_id. API schemas remain unchanged.
+
+### How to Test
+
+Use an explicitly configured disposable PostgreSQL DATABASE_URL and the
+commands in `docs/map-p1-review.md`. Tests migrate private schemas and roll them
+back; no production database or deployment configuration was touched.
+
+- Full PostgreSQL 17 backend regression: **595 passed, 0 failed, 0 skipped**.
+- New P1 suite with minimum SQLAlchemy 2.0.40: **34 passed, 0 failed**.
+- Default backend suite: **368 passed, 0 failed, 227 PostgreSQL-gated skipped**;
+  all gated tests were run successfully in the full PostgreSQL suite above.
+- Alembic CLI upgrade head → check → downgrade 0005 → upgrade head → check
+  passed against the disposable local database; both checks reported no new
+  upgrade operations. Offline 0005:0006 SQL generation passed.
+- Syntax compilation, `pip check` and `git diff --check` passed.
+- Backend lint/format/typecheck commands are not configured in the repository
+  or CI, so those checks were unavailable; no new tooling was introduced.
+
+### Problems Encountered
+
+The supplied UUID plan conflicted with the existing integer primary keys;
+using existing types avoided any conversion of old data. Column-specific
+SET NULL requires PostgreSQL 15+ and SQLAlchemy 2.0.40+, so the existing
+SQLAlchemy minimum was raised and the migration rejects older PostgreSQL
+versions before online DDL. CI/Docker use PostgreSQL 16. Production server
+version remains unverified and must be checked before a later release.
+
+The first migration preservation test changed updated_at through SQLAlchemy's
+update hook while preparing a linked row. Its setup now uses raw SQL to isolate
+migration effects; the final test compares every old field after downgrade.
+Local PostgreSQL initialization required sandbox escalation for shared memory;
+an isolated loopback-only temporary cluster was used. Syntax compilation was
+rerun with its cache in /private/tmp after the system cache path was blocked.
+
+### What I Learned
+
+Composite FK SET NULL without a column list would also null trip_id. PostgreSQL
+15's column list protects the required Trip key without triggers or duplicate
+FKs. The trip_places composite unique indexes already support trip_id lookups,
+so a separate trip_id index is unnecessary. Upgrade preserves legacy data;
+downgrade intentionally discards the new pool and associations. DDL takes locks,
+so future production rollout needs a controlled migration window.
+
+### Next Step
+
+Amendment (2026-10-14, before push): 0006 now also adds
+`proposed_by_user_id` (FK users, RESTRICT, indexed; drives per-member map
+colors), nullable `note` String(500), and `ck_trip_places_provider_place_id`
+(manual places exactly when provider_place_id is NULL). P2 contract decisions:
+coordinates are JSON numbers; coordinates are immutable after creation.
+Verification after amendment: P1 suite **39 passed**; full backend suite with
+PostgreSQL **600 passed, 0 failed**.
+
+P2 may begin only after the user confirms P1. Implement P2 from the separately
+confirmed plan, retaining service authorization and same-Trip place checks.
