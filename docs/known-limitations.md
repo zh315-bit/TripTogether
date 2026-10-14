@@ -77,6 +77,23 @@ is production secure, production deployed, or that the full-stack web MVP is don
 - All repository files were untracked when Step 11 was reviewed; no commit was
   made by this task. `.gitignore` protects local secrets and AppleDouble files.
 
+## Place Search (Map P3)
+
+- Public Nominatim is best-effort with no SLA; access may be withdrawn and the
+  usage policy may change. Larger usage needs a commercial provider or a
+  self-hosted instance (swap the provider; the API contract stays the same).
+- The one-request-per-second limit is enforced across all workers/instances by
+  the single `geocoder_throttle` row. Excess searches get 429 immediately
+  instead of queueing, so one heavy user can delay others; there is no
+  per-user fairness.
+- The result cache is per process (24 h TTL, 1000 entries) and is lost on
+  restart; only the throttle is shared.
+- No automatic retries. Upstream 403/429 starts a 60-second shared cooldown.
+- Results use Nominatim's default language; Accept-Language is not forwarded.
+- Saved search results are trusted as submitted: the server validates
+  coordinate ranges and identifier format but does not re-verify the
+  coordinates against the provider.
+
 ## Client Status
 
 The React + TypeScript + Vite foundation and Step13 authentication UI are

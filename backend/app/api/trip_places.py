@@ -15,7 +15,8 @@ from app.services import trip_places
 
 router = APIRouter(prefix="/trips/{trip_id}/places", tags=["places"], responses={
     401: {"model": APIErrorResponse}, 404: {"model": APIErrorResponse},
-    422: {"model": APIErrorResponse}, 503: {"model": APIErrorResponse},
+    409: {"model": APIErrorResponse}, 422: {"model": APIErrorResponse},
+    503: {"model": APIErrorResponse},
 })
 
 
@@ -26,6 +27,9 @@ def place_http_errors() -> Iterator[None]:
             yield
         except trip_places.PlaceNotFoundError:
             raise APIError(status_code=404, detail="Place not found", code="PLACE_NOT_FOUND") from None
+        except trip_places.PlaceDuplicateError:
+            raise APIError(status_code=409, detail="This place is already in the trip",
+                           code="PLACE_DUPLICATE") from None
         except trip_places.PlaceUnavailableError:
             raise APIError(status_code=503, detail="Places temporarily unavailable",
                            code="PLACES_UNAVAILABLE") from None

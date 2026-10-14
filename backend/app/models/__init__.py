@@ -6,5 +6,7 @@ from app.models.trip_invitation import TripInvitation
 from app.models.itinerary_item import ItineraryItem
 from app.models.expense import Expense
 from app.models.expense_split import ExpenseSplit
+from app.models.geocoder_throttle import GeocoderThrottle
 
-__all__ = ["User", "Trip", "TripPlace", "TripMember", "TripInvitation", "ItineraryItem", "Expense", "ExpenseSplit"]
+__all__ = ["User", "Trip", "TripPlace", "TripMember", "TripInvitation", "ItineraryItem", "Expense", "ExpenseSplit",
+           "GeocoderThrottle"]

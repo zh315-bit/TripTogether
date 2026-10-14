@@ -20,9 +20,9 @@ def test_migration_round_trip_and_metadata(migrated_database) -> None:
     connection, config = migrated_database
     assert set(inspect(connection).get_table_names()) == {
         "users", "trips", "trip_members", "trip_invitations", "itinerary_items",
-        "expenses", "expense_splits", "trip_places", "alembic_version",
+        "expenses", "expense_splits", "trip_places", "geocoder_throttle", "alembic_version",
     }
-    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0006"
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0007"
     command.check(config)
     command.downgrade(config, "base")
     assert "users" not in inspect(connection).get_table_names()

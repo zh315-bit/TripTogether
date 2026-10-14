@@ -1,9 +1,10 @@
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 from pydantic import (
     BaseModel, BeforeValidator, ConfigDict, Field, StringConstraints, field_validator,
+    model_validator,
 )
 
 
@@ -35,10 +36,12 @@ Longitude = Annotated[
 PlaceName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 Address = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
 Note = Annotated[str, StringConstraints(max_length=500)]
+# OSM type initial plus OSM id, e.g. N123 (node), W456 (way), R789 (relation).
+ProviderPlaceID = Annotated[str, StringConstraints(pattern=r"^[NWR][1-9][0-9]{0,19}$")]
 
 
 class PlaceInput(BaseModel):
-    # extra="forbid" also rejects provider, proposer and timestamp injection.
+    # extra="forbid" also rejects proposer, ID and timestamp injection.
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     @field_validator("name", "address", "note", check_fields=False)
@@ -60,6 +63,15 @@ class TripPlaceCreate(PlaceInput):
     longitude: Longitude
     address: Optional[Address] = None
     note: Optional[Note] = None
+    # Omit both for a manual place; send both for a saved search result.
+    provider: Optional[Literal["nominatim"]] = None
+    provider_place_id: Optional[ProviderPlaceID] = None
+
+    @model_validator(mode="after")
+    def provider_identity_pair(self) -> "TripPlaceCreate":
+        if (self.provider is None) != (self.provider_place_id is None):
+            raise ValueError("provider and provider_place_id must be sent together")
+        return self
 
 
 class TripPlaceUpdate(PlaceInput):

@@ -3518,3 +3518,22 @@ Verification: new P2 suite plus updated API contract counts (32 operations,
 ### Next Step
 
 P3: geocoding proxy (Nominatim provider, global throttle, cache, kill switch).
+
+## 2026-10-14 — Collaborative Map P3: Geocoding Proxy
+
+Added `GET /api/v1/geocode` (authenticated, explicit search only) with a
+pluggable provider (nominatim / fake / disabled, default disabled), a
+database-backed application-wide 1 request/second throttle (migration 0007,
+`geocoder_throttle`), per-process TTL+LRU cache, shared 60 s cooldown on
+upstream 403/429, no retries, bounded timeouts and suppressed httpx URL logs.
+Place create now accepts `provider`+`provider_place_id` together; duplicates
+in a Trip are 409 `PLACE_DUPLICATE`. Production startup validates geocoder
+configuration. Details: `docs/map-p3-review.md`.
+
+Verification: full backend suite with PostgreSQL **723 passed, 0 failed**;
+`alembic check` clean at head 0007. The local development database was
+upgraded to 0007 (`alembic downgrade 0005` reverts P1-P3 schema).
+
+### Next Step
+
+P4: straight-line route calculation, optimize preview and guarded reorder.

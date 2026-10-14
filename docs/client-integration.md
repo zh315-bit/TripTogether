@@ -254,9 +254,25 @@ annotate or delete any place in the Trip; others get the usual hidden 404.
 - Coordinates are immutable. PATCH accepts only `name`, `address`, `note`;
   `address`/`note` clear with null, `name` cannot be null. To move a place,
   delete it and create a new one.
-- The server sets `proposed_by_user_id` (used for per-member map colors),
-  `provider` (`manual` in P2) and `provider_place_id` (null). Clients cannot
-  send them.
+- The server sets `proposed_by_user_id` (used for per-member map colors).
+  Omit `provider`/`provider_place_id` for a manual place; to save a search
+  result, copy both from `/geocode` together. The same result twice in one
+  Trip is 409 `PLACE_DUPLICATE`.
 - Deleting a place keeps linked itinerary items and their `location` text;
   only the internal association is cleared. Itinerary responses do not yet
   expose `place_id`.
+
+## Place Search (Map P3)
+
+`GET /api/v1/geocode?q=...&limit=5` (authenticated) proxies place search.
+
+- Call it only on an explicit user action (Search button or Enter). Never
+  call it per keystroke: autocomplete is forbidden by the Nominatim policy.
+- 429 `GEOCODER_BUSY` with `Retry-After: 1` means the application-wide
+  one-per-second budget is in use; show "busy, try again" and let the user
+  retry. Do not retry automatically in a loop.
+- 503 `GEOCODER_DISABLED` means the operator turned search off; manual
+  places still work. 503 `GEOCODER_UNAVAILABLE` is a temporary upstream failure.
+- Results: `provider`, `provider_place_id`, `name`, `address`, `latitude`,
+  `longitude` (JSON numbers, six decimal places). Show the attribution
+  "Search data © OpenStreetMap contributors" near the results.

@@ -18,6 +18,10 @@ class PlaceUnavailableError(Exception):
     pass
 
 
+class PlaceDuplicateError(Exception):
+    pass
+
+
 @contextmanager
 def place_errors(db: Session) -> Iterator[None]:
     try:
@@ -25,7 +29,7 @@ def place_errors(db: Session) -> Iterator[None]:
     except SQLAlchemyError:
         db.rollback()
         raise PlaceUnavailableError() from None
-    except PlaceNotFoundError:
+    except (PlaceNotFoundError, PlaceDuplicateError):
         db.rollback()
         raise
 
@@ -57,7 +61,15 @@ def get_place(db: Session, trip_id: int, user_id: int, place_id: int) -> TripPla
 def create_place(db: Session, trip_id: int, user_id: int, payload: TripPlaceCreate) -> TripPlace:
     get_accessible_trip(db, trip_id, user_id, for_update=True)
     with place_errors(db):
-        place = TripPlace(**payload.model_dump(), trip_id=trip_id, proposed_by_user_id=user_id)
+        if payload.provider is not None and db.scalar(select(TripPlace.id).where(
+            TripPlace.trip_id == trip_id, TripPlace.provider == payload.provider,
+            TripPlace.provider_place_id == payload.provider_place_id,
+        )) is not None:
+            # The Trip row lock serializes creates, so this check cannot race.
+            raise PlaceDuplicateError()
+        # Omitted provider falls back to the database default, 'manual'.
+        place = TripPlace(**payload.model_dump(exclude_none=True), trip_id=trip_id,
+                          proposed_by_user_id=user_id)
         db.add(place)
         db.commit()
         db.refresh(place)

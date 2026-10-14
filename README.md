@@ -68,7 +68,7 @@ Open `http://127.0.0.1:5173`.
 
 ## Environment Variables
 
-The root `.env` configures the server: `DATABASE_URL`, `JWT_SECRET_KEY`, `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `APP_ENV`, and `CORS_ORIGINS`. Use a strong local JWT key and never commit it.
+The root `.env` configures the server: `DATABASE_URL`, `JWT_SECRET_KEY`, `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `APP_ENV`, `CORS_ORIGINS`, and the optional `GEOCODER_*` place-search settings. Use a strong local JWT key and never commit it.
 
 `frontend/.env.example` contains only `VITE_API_BASE_URL`. All `VITE_*` values are bundled for the browser and are public configuration. Do not put database URLs, passwords, or JWT signing secrets there.
 
@@ -92,6 +92,9 @@ Development uses `npm run dev`, `uvicorn --reload`, and a local PostgreSQL insta
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Backend | Integer between 1 and 1440; current project variable name. |
 | `APP_ENV` | Backend | `production`, which validates database and JWT configuration on startup. |
 | `CORS_ORIGINS` | Backend | JSON array of exact HTTPS frontend origins, with no trailing slash. |
+| `GEOCODER_PROVIDER` | Backend | `disabled` (default) or `nominatim`; `fake` is rejected in production. Set `disabled` and restart to turn search off. |
+| `GEOCODER_USER_AGENT` | Backend | Required for `nominatim`: application name plus contact, per the [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/). |
+| `GEOCODER_BASE_URL` | Backend | HTTPS origin; defaults to the public Nominatim service. |
 | `VITE_API_BASE_URL` | Frontend build | Public HTTPS backend origin only; it is safe to expose but must not contain credentials. |
 
 Keep these values in the deployment platform's secret/configuration store. `.env` is local-only and ignored by Git; `.env.example` and `frontend/.env.example` contain placeholders only.
@@ -115,7 +118,7 @@ APP_ENV=production /path/to/venv/bin/python -m uvicorn app.main:app --host 0.0.0
 
 `/health` is a liveness endpoint and never accesses the database. `/ready`
 validates JWT configuration, PostgreSQL connectivity, that the database
-revision matches the application's single Alembic head, and that all seven
+revision matches the application's single Alembic head, and that all nine
 core tables exist. It returns 503 until every check passes; use it for
 readiness checks after the controlled migration finishes.
 

@@ -27,6 +27,7 @@ not creator-only ownership.
 | --- | --- |
 | POST /auth/register, POST /auth/login | Public; validation still applies |
 | GET /auth/me | Current authenticated user only |
+| GET /geocode | Any authenticated user; not Trip-scoped, shares one global rate limit |
 | POST /trips | Any authenticated user; server sets owner and owner membership |
 | GET /trips | Any authenticated user; SQL returns owned/joined trips only |
 | GET /invitations | Authenticated recipient's own invitation history only |
@@ -48,11 +49,11 @@ path/body data may independently produce 422.
 ## Code and Coverage
 
 - `app/api/dependencies.py`: token validation before database lookup, shared
-  `get_current_user`; all 28 protected formal operations audited.
+  `get_current_user`; all 29 protected formal operations audited.
 - `app/services/trips.py`: `accessible_to` uses Owner OR EXISTS membership;
   `get_owned_trip` is stricter. SQL filters apply before rows are returned.
 - Invitation, itinerary, expense and place services scope child IDs to their Trip.
-- `tests/test_api_contract.py`: all 28 protected operations reject anonymous
+- `tests/test_api_contract.py`: all 29 protected operations reject anonymous
   callers before DB access; real v1 workflow checks pending/outsider/member/
   recipient/owner boundaries.
 - Existing Step 6-10 suites retain full role, cross-trip child-ID, rollback
