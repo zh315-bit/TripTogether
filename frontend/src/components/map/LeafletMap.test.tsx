@@ -1,9 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import L from 'leaflet'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  DEFAULT_TILE_URL, LeafletMap, OSM_ATTRIBUTION, resetTileConfigWarning, tileConfig,
-} from './LeafletMap'
+import { LeafletMap } from './LeafletMap'
+import { DEFAULT_TILE_URL, OSM_ATTRIBUTION, resetTileConfigWarning, tileConfig } from './tiles'
 import type { MapMarker } from './LeafletMap'
 
 const hostile = '<img src=x onerror="window.__xss = true">Temple'

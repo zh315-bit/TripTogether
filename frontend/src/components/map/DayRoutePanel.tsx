@@ -17,7 +17,7 @@ type Props = {
   onCancel: () => void
 }
 
-export const km = (value: number) => `${value.toFixed(value < 10 ? 2 : 1)} km`
+const km = (value: number) => `${value.toFixed(value < 10 ? 2 : 1)} km`
 
 function title(itemsById: Map<number, ItineraryItem>, id: number): string {
   return itemsById.get(id)?.title ?? `Item #${id}`

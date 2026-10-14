@@ -10,6 +10,7 @@ import type { DayRoute, GeocodeResult, OptimizePlan, PlaceInput, PlaceUpdate, Tr
 import type { Trip } from '../../types/trip'
 import { memberStyle, memberStyles } from '../../utils/memberColors'
 import { DayRoutePanel } from './DayRoutePanel'
+import { tripDays } from './days'
 import { errorCode, errorText } from './errorText'
 import { LeafletMap } from './LeafletMap'
 import type { LatLng, MapLine, MapMarker } from './LeafletMap'
@@ -21,17 +22,6 @@ const ROUTE_COLOR = '#17233a'
 const SUGGESTED_COLOR = '#c2410c'
 const CONFLICT_MESSAGE =
   'This day was changed by another member. The latest itinerary has been loaded; suggest again for a fresh order.'
-
-export function tripDays(start: string, end: string): string[] {
-  const days: string[] = []
-  const cursor = new Date(`${start}T00:00:00Z`)
-  const last = new Date(`${end}T00:00:00Z`)
-  while (cursor <= last && days.length < 366) {
-    days.push(cursor.toISOString().slice(0, 10))
-    cursor.setUTCDate(cursor.getUTCDate() + 1)
-  }
-  return days
-}
 
 /**
  * Data flow: places, members and itinerary are loaded once; the selected day's
