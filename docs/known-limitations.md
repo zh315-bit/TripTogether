@@ -94,6 +94,21 @@ is production secure, production deployed, or that the full-stack web MVP is don
   coordinate ranges and identifier format but does not re-verify the
   coordinates against the provider.
 
+## Routes and Optimization (Map P4)
+
+- Distances are straight-line (great-circle) kilometres between consecutive
+  located items. They are not road, walking or transit distance or time, and a
+  shorter straight line does not guarantee a faster real trip.
+- Optimization is nearest neighbour plus 2-opt from every first stop. It is a
+  heuristic, not a guaranteed shortest route; on seeded random tests it matched
+  the exact optimum in about 98% of small cases and was within 12% otherwise.
+- Timed items, unlocated items and (by default) the first item are fixed;
+  only runs between them are reordered. There are no time windows, opening
+  hours or durations, and no fixed final stop other than a following anchor.
+- At most 50 items per day can be optimized.
+- Itinerary `location` is a text snapshot taken when a place is linked; later
+  place renames do not update it.
+
 ## Client Status
 
 The React + TypeScript + Vite foundation and Step13 authentication UI are

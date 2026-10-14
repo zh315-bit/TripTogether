@@ -3537,3 +3537,21 @@ upgraded to 0007 (`alembic downgrade 0005` reverts P1-P3 schema).
 ### Next Step
 
 P4: straight-line route calculation, optimize preview and guarded reorder.
+
+## 2026-10-14 — Collaborative Map P4: Straight-Line Routes and Optimization
+
+Itinerary items can link a same-Trip place (`place_id`, location snapshot on
+create). Added versioned-only `GET .../itinerary/route` (straight-line legs)
+and `POST .../itinerary/optimize` (read-only preview: nearest neighbour from
+every first stop + 2-opt, timed/unlocated/first items anchored, never longer
+than the original, max 50 items). Reorder accepts optional
+`expected_item_ids`; stale applies are 409 `ITINERARY_CONFLICT`, repeats are
+idempotent. Details: `docs/map-p4-review.md`.
+
+Verification: full backend suite with PostgreSQL **778 passed, 0 failed**.
+Heuristic vs brute force: 98.4% optimal over 2,100 seeded cases, worst +10.4%.
+
+### Next Step
+
+P5: frontend map tab (Leaflet), place search and pool, per-member colors,
+day route display.

@@ -11,7 +11,7 @@ from app.api.auth import router as auth_router
 from app.api.errors import APIErrorResponse, http_error_handler, validation_error_handler
 from app.api.trips import router as trips_router
 from app.api.invitations import router as invitations_router
-from app.api.itinerary import router as itinerary_router
+from app.api.itinerary import route_router as itinerary_route_router, router as itinerary_router
 from app.api.expenses import router as expenses_router
 from app.api.balances import router as balances_router
 from app.api.trip_places import router as trip_places_router
@@ -68,6 +68,8 @@ def create_app() -> FastAPI:
     application.add_exception_handler(RequestValidationError, validation_error_handler)
     application.add_exception_handler(StarletteHTTPException, http_error_handler)
     versioned = APIRouter(prefix="/api/v1")
+    # Must precede itinerary_router: see route_router in app/api/itinerary.py.
+    versioned.include_router(itinerary_route_router)
     for router in (auth_router, trips_router, invitations_router, itinerary_router,
                    expenses_router, balances_router):
         application.include_router(router, include_in_schema=False)

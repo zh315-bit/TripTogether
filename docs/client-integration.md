@@ -276,3 +276,19 @@ annotate or delete any place in the Trip; others get the usual hidden 404.
 - Results: `provider`, `provider_place_id`, `name`, `address`, `latitude`,
   `longitude` (JSON numbers, six decimal places). Show the attribution
   "Search data © OpenStreetMap contributors" near the results.
+
+## Routes and Optimization (Map P4)
+
+- Link an itinerary item to a pool place with `place_id` on create or PATCH
+  (`null` unlinks). If `location` is omitted on create, it becomes the place
+  name. Map coordinates always come from the place, never from `location`.
+- `GET /itinerary/route?date=` returns ordered `stops`, `legs` with
+  `distance_km`, `total_distance_km` and `unlocated_item_ids`. Label these as
+  "straight-line distance"; never as driving, walking or travel time.
+- `POST /itinerary/optimize {"date", "keep_first": true}` returns a suggestion
+  only. Show original vs proposed distance and order; label it "suggested
+  order (shorter straight-line path)", never "shortest route".
+- To apply, send `PATCH /itinerary/reorder` with `item_ids` =
+  `proposed_item_ids` and `expected_item_ids` = `original_item_ids`. On 409
+  `ITINERARY_CONFLICT`, tell the user the day changed and re-run the preview.
+  Repeating the same apply is a harmless 200. Cancel sends nothing.
