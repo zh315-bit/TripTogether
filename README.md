@@ -18,6 +18,7 @@ This is a deployed portfolio MVP. The application deliberately keeps the domain 
 - Record exact-decimal expenses with equal splits.
 - View server-derived balances and suggested settlement transfers.
 - Use responsive pages with loading, empty, error, confirmation, and success feedback.
+- Plan on a shared map: search or pin candidate places (colour-coded per member), link them to itinerary items, view each day's straight-line route, and apply a suggested shorter visiting order with conflict detection.
 
 ## Tech Stack
 
@@ -96,6 +97,7 @@ Development uses `npm run dev`, `uvicorn --reload`, and a local PostgreSQL insta
 | `GEOCODER_USER_AGENT` | Backend | Required for `nominatim`: application name plus contact, per the [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/). |
 | `GEOCODER_BASE_URL` | Backend | HTTPS origin; defaults to the public Nominatim service. |
 | `VITE_API_BASE_URL` | Frontend build | Public HTTPS backend origin only; it is safe to expose but must not contain credentials. |
+| `VITE_MAP_TILE_URL` | Frontend build | Optional HTTPS tile template. The default public OSM tiles are for development and light demos only; use a commercial or self-hosted tile service for real traffic. |
 
 Keep these values in the deployment platform's secret/configuration store. `.env` is local-only and ignored by Git; `.env.example` and `frontend/.env.example` contain placeholders only.
 

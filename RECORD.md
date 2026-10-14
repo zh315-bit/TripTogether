@@ -3555,3 +3555,88 @@ Heuristic vs brute force: 98.4% optimal over 2,100 seeded cases, worst +10.4%.
 
 P5: frontend map tab (Leaflet), place search and pool, per-member colors,
 day route display.
+
+## 2026-10-14 — Collaborative Map P5: Web Map Tab
+
+### What Was Implemented
+
+A lazily loaded **Map** tab in the Trip workspace: explicit place search,
+saving results to a shared place pool, manual places (typed or clicked
+coordinates), editing and in-page delete confirmation, per-member marker
+colours, a "Linked place" select in the itinerary form, each day's
+straight-line route, and a "suggest shorter order" preview that is applied
+only on confirmation, with conflict detection. P5.0 (separate commit) fixed
+location refresh on place switch, parsed `place_id`, and guarded manual
+reorder with `expected_item_ids`.
+
+### Files to Review
+
+- `frontend/src/components/map/LeafletMap.tsx` (imperative Leaflet bridge)
+- `frontend/src/components/map/MapPanel.tsx` (state and data flow)
+- `frontend/src/components/map/PlaceSearch.tsx`, `PlacePool.tsx`, `DayRoutePanel.tsx`
+- `frontend/src/api/places.ts`, `frontend/src/types/places.ts`
+- `frontend/src/utils/memberColors.ts`
+- `frontend/src/components/ItineraryPanel.tsx`, `frontend/src/pages/TripDetailPage.tsx`
+- `frontend/src/api/client.ts` (`ApiError.retryAfter`)
+- `backend/app/main.py` (CORS `expose_headers`), `backend/app/schemas/trip_place.py`
+- `docs/map-p5-review.md`
+
+### Key Code to Understand
+
+- `LeafletMap` creates the map once (`useEffect([])`), keeps one layer group,
+  and redraws on prop changes; bounds refit keys on the set of positions.
+  Labels and tooltips are DOM elements built with `textContent`, so other
+  members' place names can never inject HTML.
+- `React.lazy(() => import('../components/map/MapPanel'))` plus `Suspense`
+  puts Leaflet and its CSS into a separate chunk.
+- Apply calls `reorderItinerary(..., proposed, original)`. The server compares
+  `original` with the current order under the Trip row lock; 409 means someone
+  else changed the day, so the client reloads instead of retrying.
+- Member colour = index in the member list, from a palette with tested
+  contrast; the initial and name always accompany the colour.
+
+### Architecture Concept
+
+Integrating an imperative, DOM-owning library into React through a narrow
+adapter; code splitting by route-level feature; optimistic concurrency
+surfaced in UX (preview → guarded apply → explain and reload on conflict);
+treating third-party service policy (tiles, geocoding) as a design constraint.
+
+### How to Test
+
+```bash
+cd frontend && npm run lint && npm run typecheck && npm test && npm run build
+cd ../backend && RUN_POSTGRES_TESTS=1 python -m pytest -q
+```
+
+Manual: run the backend with `GEOCODER_PROVIDER=fake` and the Vite dev
+server (see `docs/map-p5-review.md`), open a trip → Map. Search "Senso" (no
+request while typing), add it, add a manual place, link places in Itinerary,
+pick a day, Suggest, Apply. Screenshots are in `docs/screenshots/map-*.jpg`.
+Results: frontend **141 passed** (1 opt-in skipped), backend **780 passed**.
+User browser acceptance pending.
+
+### Problems Encountered
+
+- react-leaflet is Hippocratic-2.1 licensed; Leaflet was wrapped directly.
+- `Retry-After` is not CORS-safelisted, so cross-origin browsers would read
+  `null`; added `expose_headers`.
+- The manual walkthrough found that saving a `fake` search result returned
+  422 (schema accepted only `nominatim`); fixed with a round-trip test.
+- Leaflet's inline `transform` overrode a CSS offset for stop numbers; used
+  `iconAnchor` instead.
+- Unmemoized form `initial` values would reset typed input when places
+  finished loading; memoized them.
+- The contrast test rejected the first fallback grey (2.78:1 on dark).
+
+### What I Learned
+
+Licences are part of dependency review; tests built on mocked data can hide
+cross-boundary bugs that a real end-to-end pass reveals; CORS governs which
+response headers browser code can read; and accessible colour coding needs
+measured contrast plus a non-colour cue.
+
+### Next Step
+
+User browser acceptance of the Map tab (and pending Steps 14-16), then push
+`feature/collaborative-map` and open a pull request.

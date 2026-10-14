@@ -91,6 +91,9 @@ def create_app() -> FastAPI:
         CORSMiddleware, allow_origins=list(settings.cors_origins), allow_credentials=False,
         allow_methods=["GET", "POST", "PATCH", "DELETE"],
         allow_headers=["Authorization", "Content-Type"], max_age=600,
+        # Not CORS-safelisted: without this a cross-origin client cannot read the
+        # GEOCODER_BUSY retry delay.
+        expose_headers=["Retry-After"],
     )
     return application
 

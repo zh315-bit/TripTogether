@@ -375,6 +375,19 @@ def test_simultaneous_workers_get_exactly_one_slot(independent_sessions):
 
 # ---- Saving search results as places -------------------------------------
 
+def test_search_results_save_unchanged(geocode_api, collaboration):
+    # Regression: fake results (provider "fake") were rejected with 422 on save.
+    client, _, headers, use = geocode_api
+    trip = collaboration[4]
+    use(GeocodingService(FakeProvider()))
+    result, = search(client, headers, "Senso-ji").json()
+    created = client.post(f"{PREFIX}/trips/{trip['id']}/places", headers=headers, json=result)
+    assert created.status_code == 201, created.text
+    assert {key: created.json()[key] for key in result} == result
+    error_contract(client.post(f"{PREFIX}/trips/{trip['id']}/places", headers=headers, json=result),
+                   409, "PLACE_DUPLICATE")
+
+
 def test_saved_search_result_is_deduplicated_per_trip(collaboration):
     client, conn, _, users, trip = collaboration
     ah = users["alice"][1]

@@ -34,6 +34,18 @@ describe('API client', () => {
     })
   })
 
+  it.each([['1', 1], [' 30 ', 30], ['Wed, 21 Oct 2026 07:28:00 GMT', null], ['-1', null], [null, null]])(
+    'reads a delay-seconds Retry-After header: %s', async (header, expected) => {
+      const headers = header === null ? undefined : { 'Retry-After': header }
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+        error: { code: 'GEOCODER_BUSY', message: 'Busy', details: [] },
+      }), { status: 429, headers })))
+      await expect(apiFetch('/api/v1/geocode?q=x')).rejects.toMatchObject({
+        status: 429, code: 'GEOCODER_BUSY', retryAfter: expected,
+      })
+    },
+  )
+
   it('converts transport failure into ApiError without retrying', async () => {
     const mock = vi.fn().mockRejectedValue(new TypeError())
     vi.stubGlobal('fetch', mock)

@@ -93,18 +93,22 @@ same envelope inside `/api/v1`.
 Places (map P2) are versioned-only and have no legacy alias. Coordinates are
 JSON numbers with at most six decimal places and are immutable after creation;
 PATCH accepts only name, address and note. `proposed_by_user_id` is set from the
-authenticated user. A saved search result sends `provider` (`nominatim`) and
+authenticated user. A saved search result sends `provider` (`nominatim`, or
+`fake` in development) and
 `provider_place_id` (`N|W|R` + OSM id) together; repeating one inside a Trip is
 409 PLACE_DUPLICATE. Error codes: PLACE_NOT_FOUND (404), PLACE_DUPLICATE (409),
 PLACES_UNAVAILABLE (503). Geocoding codes: GEOCODER_BUSY (429, `Retry-After: 1`),
-GEOCODER_DISABLED and GEOCODER_UNAVAILABLE (503).
+GEOCODER_DISABLED and GEOCODER_UNAVAILABLE (503). CORS exposes `Retry-After`
+(`expose_headers`) so a cross-origin browser client can read the delay.
 
 Map P4: itinerary create/update accept optional `place_id` (same Trip only,
 else 422; null unlinks) and responses include `place_id` on both v1 and legacy
 paths. `route` and `optimize` are versioned-only and read-only. Reorder accepts
 optional `expected_item_ids`; if the current order differs from it (and from
 the target), the response is 409 ITINERARY_CONFLICT. Omitting it keeps the
-previous behavior exactly.
+previous behavior exactly. PATCH switching `place_id` to a different place
+without sending `location` refreshes `location` to the new place name (P5.0).
+The web client (P5) uses every endpoint above; no new endpoint was added.
 
 ## Compatibility and Documentation Routes
 

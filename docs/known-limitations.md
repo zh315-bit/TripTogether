@@ -109,6 +109,29 @@ is production secure, production deployed, or that the full-stack web MVP is don
 - Itinerary `location` is a text snapshot taken when a place is linked; later
   place renames do not update it.
 
+## Web Map (Map P5)
+
+- Default tiles come from the public OpenStreetMap tile service, which is
+  best-effort, has no SLA and forbids heavy use, prefetching and offline
+  download. It is not suitable for production traffic: before launch, set
+  `VITE_MAP_TILE_URL` to a commercial or self-hosted tile service and update
+  `OSM_ATTRIBUTION` in `LeafletMap.tsx` to that provider's required credit.
+- react-leaflet was evaluated and not used: react-leaflet 5.0.0 and
+  @react-leaflet/core 3.0.0 are Hippocratic-2.1 (not OSI-approved). The app
+  wraps Leaflet (BSD-2-Clause) directly in `LeafletMap.tsx`.
+- The map is not live: other members' changes appear after reload or after an
+  action that refetches (apply, delete). Conflicts are detected, not merged.
+- Map-click picking needs a pointer; keyboard and screen-reader users enter
+  coordinates in the manual form instead. Markers are focusable and named, and
+  every map fact is also listed in text.
+- The map does not refit when you pan unless the set of plotted positions
+  changes; showing a suggestion refits to include the dashed line.
+- With five tabs, the Trip workspace tab strip scrolls horizontally on narrow
+  phones (it already used `overflow-x: auto`).
+- `npm audit` reports one high-severity advisory in `source-map-js`, a
+  transitive build-tool dependency that predates P5 and does not ship in the
+  browser bundle; it is not addressed here.
+
 ## Client Status
 
 The React + TypeScript + Vite foundation and Step13 authentication UI are

@@ -90,6 +90,50 @@ describe('collaboration and itinerary UI', () => {
     expect(listCalls).toBe(2)
   })
 
+  it('links an itinerary item to a pool place, following the place name for location', async () => {
+    const places = [
+      { id: 1, trip_id: 12, proposed_by_user_id: 7, name: 'Senso-ji', address: null, latitude: 35.7,
+        longitude: 139.8, provider: 'manual', provider_place_id: null, note: null,
+        created_at: item.created_at, updated_at: item.created_at },
+      { id: 2, trip_id: 12, proposed_by_user_id: 8, name: 'Tokyo Tower', address: null, latitude: 35.6,
+        longitude: 139.7, provider: 'manual', provider_place_id: null, note: null,
+        created_at: item.created_at, updated_at: item.created_at },
+    ]
+    const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET'
+      if (url.endsWith('/health')) return json({ status: 'ok' })
+      if (url.endsWith('/me')) return json(user)
+      if (url.endsWith('/places')) return json(places)
+      if (url.endsWith('/itinerary') && method === 'GET') return json([{ ...item, place_id: 1, location: 'Senso-ji' }])
+      if (url.endsWith('/itinerary') && method === 'POST') {
+        return json({ ...item, id: 10, ...JSON.parse(String(init?.body)), position: 2 }, 201)
+      }
+      if (url.endsWith('/trips/12')) return json(trip)
+      return json([])
+    })
+    mount('/trips/12', fetcher)
+    await userEvent.click(await screen.findByRole('tab', { name: 'Itinerary' }))
+    expect(await screen.findByText('Place: Senso-ji')).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('Title'), 'Views')
+    const select = screen.getByLabelText('Linked place')
+    await userEvent.selectOptions(select, 'Senso-ji')
+    expect(screen.getByLabelText('Location')).toHaveValue('Senso-ji')
+    // Switching places follows the new name while the text was not hand-edited.
+    await userEvent.selectOptions(select, 'Tokyo Tower')
+    expect(screen.getByLabelText('Location')).toHaveValue('Tokyo Tower')
+    await userEvent.clear(screen.getByLabelText('Location'))
+    await userEvent.type(screen.getByLabelText('Location'), 'Main deck')
+    await userEvent.selectOptions(select, 'Senso-ji')
+    expect(screen.getByLabelText('Location')).toHaveValue('Main deck')
+    await userEvent.selectOptions(select, 'Tokyo Tower')
+    await userEvent.click(screen.getByRole('button', { name: 'Add item' }))
+    const post = fetcher.mock.calls.find(([url, init]) => String(url).endsWith('/itinerary') && init?.method === 'POST')
+    expect(JSON.parse(String(post?.[1]?.body))).toMatchObject({ title: 'Views', place_id: 2, location: 'Main deck' })
+    // "None" unlinks.
+    await userEvent.selectOptions(select, 'None')
+    expect(select).toHaveValue('')
+  })
+
   it('accepts a pending invitation from the dashboard inbox', async () => {
     const accepted = { ...invitation, status: 'accepted', responded_at: invitation.created_at }
     const fetcher = vi.fn(async (url: string, init?: RequestInit) => {

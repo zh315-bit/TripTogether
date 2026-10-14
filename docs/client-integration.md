@@ -268,7 +268,8 @@ annotate or delete any place in the Trip; others get the usual hidden 404.
 
 - Call it only on an explicit user action (Search button or Enter). Never
   call it per keystroke: autocomplete is forbidden by the Nominatim policy.
-- 429 `GEOCODER_BUSY` with `Retry-After: 1` means the application-wide
+- 429 `GEOCODER_BUSY` with `Retry-After: 1` (exposed to cross-origin
+  browsers via `Access-Control-Expose-Headers`) means the application-wide
   one-per-second budget is in use; show "busy, try again" and let the user
   retry. Do not retry automatically in a loop.
 - 503 `GEOCODER_DISABLED` means the operator turned search off; manual
@@ -297,3 +298,22 @@ annotate or delete any place in the Trip; others get the usual hidden 404.
   `proposed_item_ids` and `expected_item_ids` = `original_item_ids`. On 409
   `ITINERARY_CONFLICT`, tell the user the day changed and re-run the preview.
   Repeating the same apply is a harmless 200. Cancel sends nothing.
+
+## Web Client Map Tab (Map P5)
+
+The React client implements the guidance above in `src/components/map/`:
+
+- Search sends one request per submit (button/Enter), disables the button while
+  in flight, and counts down from `Retry-After` after 429. `ApiError.retryAfter`
+  carries the parsed delay. 503 messages distinguish "turned off" (use manual
+  places) from "temporarily unavailable".
+- Results are saved with `provider`/`provider_place_id` unchanged; 409
+  `PLACE_DUPLICATE` reads "already in the place pool".
+- Manual places take a name plus coordinates typed (max six decimals) or picked
+  by clicking the map. Delete uses an in-page confirmation that explains
+  automatic unlinking.
+- Member colour = position in `GET /members`, with the initial and name always
+  shown alongside the colour.
+- Day route, optimize preview, apply with `expected_item_ids`, and 409 reload
+  without retry follow the Routes section above. The itinerary panel's manual
+  up/down reorder also sends `expected_item_ids`.

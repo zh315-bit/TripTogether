@@ -54,7 +54,7 @@ describe('collaboration API adapters', () => {
     await expect(listItinerary(request, '12')).resolves.toEqual([item])
     await expect(createItineraryItem(request, '12', {
       title: item.title, date: item.date, location: item.location,
-      start_time: '09:30', end_time: null, notes: null,
+      start_time: '09:30', end_time: null, notes: null, place_id: null,
     })).resolves.toEqual(item)
     await expect(updateItineraryItem(request, '12', 9, { title: 'Updated Temple' }))
       .resolves.toMatchObject({ title: 'Updated Temple' })

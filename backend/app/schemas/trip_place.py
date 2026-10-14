@@ -64,7 +64,9 @@ class TripPlaceCreate(PlaceInput):
     address: Optional[Address] = None
     note: Optional[Note] = None
     # Omit both for a manual place; send both for a saved search result.
-    provider: Optional[Literal["nominatim"]] = None
+    # Every provider /geocode can return, so results save unchanged ("fake" exists
+    # only in development: production startup rejects GEOCODER_PROVIDER=fake).
+    provider: Optional[Literal["nominatim", "fake"]] = None
     provider_place_id: Optional[ProviderPlaceID] = None
 
     @model_validator(mode="after")

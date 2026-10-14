@@ -4,14 +4,16 @@ import { ApiError } from '../api/client'
 import {
   createItineraryItem, deleteItineraryItem, listItinerary, reorderItinerary, updateItineraryItem,
 } from '../api/collaboration'
+import { listPlaces } from '../api/places'
 import { useAuth } from '../auth/AuthContext'
 import type { ItineraryInput, ItineraryItem } from '../types/collaboration'
+import type { TripPlace } from '../types/places'
 import type { Trip } from '../types/trip'
 
 type Props = { trip: Trip }
 
 const blank = (date: string): ItineraryInput => ({
-  title: '', date, location: null, start_time: null, end_time: null, notes: null,
+  title: '', date, location: null, start_time: null, end_time: null, notes: null, place_id: null,
 })
 
 function formValue(item: ItineraryItem): ItineraryInput {
@@ -22,14 +24,16 @@ function formValue(item: ItineraryItem): ItineraryInput {
     start_time: item.start_time?.slice(0, 5) ?? null,
     end_time: item.end_time?.slice(0, 5) ?? null,
     notes: item.notes,
+    place_id: item.place_id,
   }
 }
 
 function ItemForm({
-  initial, editing, onCancel, onSubmit,
+  initial, editing, places, onCancel, onSubmit,
 }: {
   initial: ItineraryInput
   editing: boolean
+  places: TripPlace[]
   onCancel?: () => void
   onSubmit: (value: ItineraryInput) => Promise<void>
 }) {
@@ -39,8 +43,19 @@ function ItemForm({
 
   useEffect(() => setValue(initial), [initial])
 
-  function update(field: keyof ItineraryInput, next: string) {
+  function update(field: Exclude<keyof ItineraryInput, 'place_id'>, next: string) {
     setValue((current) => ({ ...current, [field]: next || null }))
+  }
+
+  function choosePlace(next: string) {
+    const placeId = next ? Number(next) : null
+    setValue((current) => {
+      const previous = places.find((place) => place.id === current.place_id)?.name
+      const chosen = places.find((place) => place.id === placeId)?.name
+      // Follow the chosen place unless the user typed their own location text.
+      const followsPlace = !current.location || current.location === previous
+      return { ...current, place_id: placeId, location: followsPlace && chosen ? chosen : current.location }
+    })
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -77,6 +92,15 @@ function ItemForm({
       <div className="field"><label htmlFor="itinerary-location">Location</label><input
         id="itinerary-location" value={value.location ?? ''} disabled={pending}
         onChange={(event) => update('location', event.target.value)} /></div>
+      <div className="field"><label htmlFor="itinerary-place">Linked place</label><select
+        id="itinerary-place" value={value.place_id ?? ''} disabled={pending}
+        onChange={(event) => choosePlace(event.target.value)}>
+        <option value="">None</option>
+        {/* Keep a stale selection visible if its place was deleted meanwhile. */}
+        {value.place_id !== null && !places.some((place) => place.id === value.place_id)
+          && <option value={value.place_id}>Unavailable place</option>}
+        {places.map((place) => <option key={place.id} value={place.id}>{place.name}</option>)}
+      </select></div>
       <div className="field"><label htmlFor="itinerary-start">Start time</label><input
         id="itinerary-start" type="time" value={value.start_time ?? ''} disabled={pending}
         onChange={(event) => update('start_time', event.target.value)} /></div>
@@ -100,6 +124,7 @@ export function ItineraryPanel({ trip }: Props) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [message, setMessage] = useState('')
   const [editing, setEditing] = useState<ItineraryItem | null>(null)
+  const [places, setPlaces] = useState<TripPlace[]>([])
 
   const load = useCallback(async () => {
     setStatus('loading')
@@ -115,6 +140,17 @@ export function ItineraryPanel({ trip }: Props) {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    // Optional: without places the form still works, just with "None" only.
+    listPlaces(request, String(trip.id)).then(setPlaces, () => setPlaces([]))
+  }, [request, trip.id])
+
+  const placeNames = useMemo(() => new Map(places.map((place) => [place.id, place.name])), [places])
+  // Stable initial values: ItemForm resets whenever `initial` changes identity, so
+  // unrelated re-renders (e.g. places finishing loading) must not wipe typed input.
+  const blankItem = useMemo(() => blank(trip.start_date), [trip.start_date])
+  const editingValue = useMemo(() => editing && formValue(editing), [editing])
 
   const grouped = useMemo(() => {
     const groups = new Map<string, ItineraryItem[]>()
@@ -170,6 +206,7 @@ export function ItineraryPanel({ trip }: Props) {
           {dayItems.map((item, index) => <article className="itinerary-row" key={item.id}>
             <div><strong>{item.title}</strong>
               <span className="trip-meta">{[item.start_time?.slice(0, 5), item.location].filter(Boolean).join(' · ') || 'No time or location'}</span>
+              {item.place_id !== null && <span className="trip-meta">Place: {placeNames.get(item.place_id) ?? 'linked place'}</span>}
               {item.notes && <p className="muted-copy">{item.notes}</p>}
             </div>
             <div className="actions">
@@ -184,8 +221,9 @@ export function ItineraryPanel({ trip }: Props) {
       {editing ? <section className="trip-editor" aria-labelledby="edit-itinerary-title">
         <h3 id="edit-itinerary-title">Edit itinerary item</h3>
         <ItemForm
-          initial={formValue(editing)}
+          initial={editingValue || formValue(editing)}
           editing
+          places={places}
           onCancel={() => setEditing(null)}
           onSubmit={async (value) => {
             const updated = await updateItineraryItem(request, String(trip.id), editing.id, value)
@@ -197,8 +235,9 @@ export function ItineraryPanel({ trip }: Props) {
       </section> : <section className="trip-editor" aria-labelledby="add-itinerary-title">
         <h3 id="add-itinerary-title">Add itinerary item</h3>
         <ItemForm
-          initial={blank(trip.start_date)}
+          initial={blankItem}
           editing={false}
+          places={places}
           onSubmit={async (value) => {
             const created = await createItineraryItem(request, String(trip.id), value)
             setItems((current) => [...current, created].sort((a, b) => a.date.localeCompare(b.date) || a.position - b.position))
