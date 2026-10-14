@@ -148,6 +148,32 @@ Screenshots (`docs/screenshots/`): `map-desktop-route.jpg`,
 
 User browser acceptance is still pending, as for Steps 14-16.
 
+## P5 Finishing Pass
+
+- **Provider policy.** `POST /places` takes the active geocoder from the same
+  `get_geocoding_service` dependency `/geocode` uses and accepts `provider`
+  only when it equals that geocoder's name. With `disabled`, only manual places
+  can be added. Mismatches are 422 on `["body","provider"]`. Existing places
+  are unaffected, and the rule is deliberately not a database constraint.
+  Tests: production-style env rejects `fake`, development `fake` saves
+  unchanged, disabled admits manual only while old imported places stay
+  readable/editable/deletable, and no `trip_places` CHECK names a provider.
+- **Tile credit.** `tileConfig()` pairs `VITE_MAP_TILE_URL` with a required
+  `VITE_MAP_TILE_ATTRIBUTION`. A missing credit or invalid URL falls back to
+  OSM tiles and credit with one `console.warn`. The custom credit is
+  HTML-escaped before Leaflet (which renders attribution as HTML). Tested,
+  including a hostile credit rendered as text.
+- **Resizing.** `LeafletMap` observes its container with `ResizeObserver`,
+  calls `invalidateSize()` on change, and disconnects in cleanup (guarded when
+  the API is absent). Tested with a mocked observer.
+- `.claude/` is ignored.
+- `npm audit fix` (no `--force`) moved `source-map-js` 1.2.1 → 1.2.2 in the
+  lockfile; `npm audit` reports 0 vulnerabilities.
+
+After this pass: frontend lint 0 warnings, typecheck clean, **146 passed**
+(1 opt-in skipped), build OK (lazy map JS 168.81 kB / gzip 50.00 kB; main
+bundle unchanged at 317.14 kB / gzip 95.52 kB); backend **784 passed**.
+
 ## How to Run Locally
 
 ```bash

@@ -388,9 +388,10 @@ def test_search_results_save_unchanged(geocode_api, collaboration):
                    409, "PLACE_DUPLICATE")
 
 
-def test_saved_search_result_is_deduplicated_per_trip(collaboration):
+def test_saved_search_result_is_deduplicated_per_trip(geocode_api, collaboration):
     client, conn, _, users, trip = collaboration
     ah = users["alice"][1]
+    geocode_api[3](GeocodingService(Upstream().provider()))
     path = f"{PREFIX}/trips/{trip['id']}/places"
     body = {"name": "Senso-ji", "latitude": 35.714766, "longitude": 139.796655,
             "provider": "nominatim", "provider_place_id": "N123"}
@@ -425,3 +426,67 @@ def test_provider_identity_validation(collaboration, changes):
     error_contract(client.post(f"{PREFIX}/trips/{trip['id']}/places",
                                headers=users["alice"][1], json=body), 422, "VALIDATION_ERROR")
     assert conn.scalar(select(TripPlace.id)) is None
+
+
+# ---- Saved provider must match the active geocoder -----------------------
+
+NOMINATIM_RESULT = {"name": "Senso-ji", "latitude": 35.714766, "longitude": 139.796655,
+                    "provider": "nominatim", "provider_place_id": "N123"}
+FAKE_RESULT = {**NOMINATIM_RESULT, "provider": "fake", "provider_place_id": "N1000001"}
+MANUAL_PLACE = {"name": "Hotel", "latitude": 35.69, "longitude": 139.70}
+
+
+def test_production_configuration_rejects_fake_results(collaboration, geocoder_env):
+    # No dependency override: the service is built from real production-style env.
+    geocoder_env.setenv("APP_ENV", "production")
+    geocoder_env.setenv("GEOCODER_PROVIDER", "nominatim")
+    geocoder_env.setenv("GEOCODER_USER_AGENT", USER_AGENT)
+    client, conn, _, users, trip = collaboration
+    path = f"{PREFIX}/trips/{trip['id']}/places"
+    body = error_contract(client.post(path, headers=users["alice"][1], json=FAKE_RESULT),
+                          422, "VALIDATION_ERROR")
+    assert body["details"] == [{
+        "loc": ["body", "provider"], "type": "value_error",
+        "msg": "provider must match the configured place search (nominatim); omit provider for a manual place",
+    }]
+    assert conn.scalar(text("SELECT count(*) FROM trip_places")) == 0
+    assert client.post(path, headers=users["alice"][1], json=NOMINATIM_RESULT).status_code == 201
+    assert client.post(path, headers=users["alice"][1], json=MANUAL_PLACE).status_code == 201
+
+
+def test_development_fake_configuration_saves_fake_results(collaboration, geocoder_env):
+    geocoder_env.setenv("GEOCODER_PROVIDER", "fake")
+    client, _, _, users, trip = collaboration
+    path = f"{PREFIX}/trips/{trip['id']}/places"
+    created = client.post(path, headers=users["alice"][1], json=FAKE_RESULT)
+    assert created.status_code == 201 and created.json()["provider"] == "fake"
+    error_contract(client.post(path, headers=users["alice"][1], json=NOMINATIM_RESULT), 422, "VALIDATION_ERROR")
+
+
+def test_disabled_search_allows_manual_places_only(geocode_api, collaboration):
+    client, conn, headers, use = geocode_api
+    trip = collaboration[4]
+    path = f"{PREFIX}/trips/{trip['id']}/places"
+    use(GeocodingService(Upstream().provider()))
+    saved = client.post(path, headers=headers, json=NOMINATIM_RESULT).json()
+    # The operator turns search off: new imported rows are refused...
+    use(GeocodingService(None))
+    for result in (NOMINATIM_RESULT, {**FAKE_RESULT, "provider_place_id": "N9"}):
+        body = error_contract(client.post(path, headers=headers, json=result), 422, "VALIDATION_ERROR")
+        assert "(disabled)" in body["details"][0]["msg"]
+    manual = client.post(path, headers=headers, json=MANUAL_PLACE)
+    assert manual.status_code == 201 and manual.json()["provider"] == "manual"
+    # ...while existing imported places stay readable, editable and deletable.
+    assert [place["id"] for place in client.get(path, headers=headers).json()] == [saved["id"], manual.json()["id"]]
+    renamed = client.patch(f"{path}/{saved['id']}", headers=headers, json={"name": "Asakusa"})
+    assert renamed.status_code == 200 and renamed.json()["provider"] == "nominatim"
+    assert client.delete(f"{path}/{saved['id']}", headers=headers).status_code == 204
+
+
+def test_provider_policy_is_not_a_database_constraint(migrated_database):
+    conn, _ = migrated_database
+    constraints = conn.execute(text(
+        "SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint "
+        "WHERE conrelid = 'trip_places'::regclass AND contype = 'c'"
+    )).all()
+    assert not any("nominatim" in definition or "fake" in definition for _, definition in constraints)

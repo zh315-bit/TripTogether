@@ -3640,3 +3640,61 @@ measured contrast plus a non-colour cue.
 
 User browser acceptance of the Map tab (and pending Steps 14-16), then push
 `feature/collaborative-map` and open a pull request.
+
+## 2026-10-14 — Collaborative Map P5 Finishing Pass
+
+### What Was Implemented
+
+Saved place `provider` must match the running geocoder (manual-only when
+disabled); custom map tiles require a plain-text credit
+(`VITE_MAP_TILE_ATTRIBUTION`) or fall back to OSM with one warning; the map
+calls `invalidateSize()` on container resize; `.claude/` is ignored; the
+build-chain `source-map-js` advisory was fixed by a non-breaking audit fix.
+
+### Files to Review
+
+- `backend/app/services/trip_places.py` (`create_place(..., configured_provider)`)
+- `backend/app/api/trip_places.py` (shares `get_geocoding_service` with `/geocode`)
+- `frontend/src/components/map/LeafletMap.tsx` (`tileConfig`, `escapeHtml`, `ResizeObserver`)
+- `backend/tests/test_geocoding.py`, `frontend/src/components/map/LeafletMap.test.tsx`
+
+### Key Code to Understand
+
+The provider rule lives in the service, fed by the same dependency instance
+as search, so "what can be searched" and "what can be saved" cannot disagree,
+and switching configuration never invalidates stored rows. Leaflet renders
+attribution as HTML, so operator-supplied credit is escaped like user data.
+
+### Architecture Concept
+
+Configuration-dependent policy belongs in application code, not schema;
+third-party licence and credit obligations are enforced by configuration
+rules with safe fallbacks.
+
+### How to Test
+
+```bash
+cd frontend && npm run lint && npm run typecheck && npm test && npm run build && npm audit
+cd ../backend && RUN_POSTGRES_TESTS=1 python -m pytest -q
+```
+
+Results: frontend **146 passed** (1 opt-in skipped), `npm audit` 0, backend
+**784 passed**.
+
+### Problems Encountered
+
+The earlier dedupe test silently relied on the old "any known provider"
+rule and now configures Nominatim explicitly. Fixture order mattered: the
+database fixture must run before the env-isolating fixture replaces `.env`.
+A test assertion with a fallback (`?? custom`) was vacuous in jsdom (no tiles
+at zero size) and was replaced with a `tileLayer` spy. TypeScript's
+`erasableSyntaxOnly` rejected a parameter property in a test class.
+
+### What I Learned
+
+Assertions with fallbacks can pass without testing anything; policy that
+depends on runtime configuration should not be frozen into constraints.
+
+### Next Step
+
+User browser acceptance, then push `feature/collaborative-map` and open the PR.

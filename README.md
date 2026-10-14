@@ -98,6 +98,7 @@ Development uses `npm run dev`, `uvicorn --reload`, and a local PostgreSQL insta
 | `GEOCODER_BASE_URL` | Backend | HTTPS origin; defaults to the public Nominatim service. |
 | `VITE_API_BASE_URL` | Frontend build | Public HTTPS backend origin only; it is safe to expose but must not contain credentials. |
 | `VITE_MAP_TILE_URL` | Frontend build | Optional HTTPS tile template. The default public OSM tiles are for development and light demos only; use a commercial or self-hosted tile service for real traffic. |
+| `VITE_MAP_TILE_ATTRIBUTION` | Frontend build | Required with a custom `VITE_MAP_TILE_URL`: the provider's credit as plain text (HTML is escaped). Without it the map falls back to OSM tiles and credit. |
 
 Keep these values in the deployment platform's secret/configuration store. `.env` is local-only and ignored by Git; `.env.example` and `frontend/.env.example` contain placeholders only.
 

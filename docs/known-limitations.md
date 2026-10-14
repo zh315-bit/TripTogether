@@ -114,8 +114,11 @@ is production secure, production deployed, or that the full-stack web MVP is don
 - Default tiles come from the public OpenStreetMap tile service, which is
   best-effort, has no SLA and forbids heavy use, prefetching and offline
   download. It is not suitable for production traffic: before launch, set
-  `VITE_MAP_TILE_URL` to a commercial or self-hosted tile service and update
-  `OSM_ATTRIBUTION` in `LeafletMap.tsx` to that provider's required credit.
+  `VITE_MAP_TILE_URL` to a commercial or self-hosted tile service together
+  with `VITE_MAP_TILE_ATTRIBUTION` (that provider's required credit, plain
+  text). A custom URL without a credit falls back to OSM tiles with one
+  console warning. Custom credits cannot contain links because they are
+  escaped; both values are build-time and need a frontend rebuild.
 - react-leaflet was evaluated and not used: react-leaflet 5.0.0 and
   @react-leaflet/core 3.0.0 are Hippocratic-2.1 (not OSI-approved). The app
   wraps Leaflet (BSD-2-Clause) directly in `LeafletMap.tsx`.
@@ -128,9 +131,13 @@ is production secure, production deployed, or that the full-stack web MVP is don
   changes; showing a suggestion refits to include the dashed line.
 - With five tabs, the Trip workspace tab strip scrolls horizontally on narrow
   phones (it already used `overflow-x: auto`).
-- `npm audit` reports one high-severity advisory in `source-map-js`, a
-  transitive build-tool dependency that predates P5 and does not ship in the
-  browser bundle; it is not addressed here.
+- The pre-existing `source-map-js` advisory (GHSA-68fv-2mgg-jv7q, build-tool
+  chain only: vite/postcss and jsdom) was fixed with a non-breaking
+  `npm audit fix` (1.2.1 → 1.2.2, lockfile only); `npm audit` now reports 0.
+- Saving a search result requires `provider` to match the running
+  `GEOCODER_PROVIDER`. This is application policy, not a database constraint:
+  places saved under an earlier provider stay valid after a switch. With search
+  disabled, only manual places can be added.
 
 ## Client Status
 

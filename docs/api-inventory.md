@@ -96,7 +96,9 @@ PATCH accepts only name, address and note. `proposed_by_user_id` is set from the
 authenticated user. A saved search result sends `provider` (`nominatim`, or
 `fake` in development) and
 `provider_place_id` (`N|W|R` + OSM id) together; repeating one inside a Trip is
-409 PLACE_DUPLICATE. Error codes: PLACE_NOT_FOUND (404), PLACE_DUPLICATE (409),
+409 PLACE_DUPLICATE. `provider` must equal the running `GEOCODER_PROVIDER`
+(only manual places when it is `disabled`); otherwise 422 with a
+`["body","provider"]` reason. Error codes: PLACE_NOT_FOUND (404), PLACE_DUPLICATE (409),
 PLACES_UNAVAILABLE (503). Geocoding codes: GEOCODER_BUSY (429, `Retry-After: 1`),
 GEOCODER_DISABLED and GEOCODER_UNAVAILABLE (503). CORS exposes `Retry-After`
 (`expose_headers`) so a cross-origin browser client can read the delay.

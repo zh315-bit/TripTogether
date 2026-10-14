@@ -257,7 +257,9 @@ annotate or delete any place in the Trip; others get the usual hidden 404.
 - The server sets `proposed_by_user_id` (used for per-member map colors).
   Omit `provider`/`provider_place_id` for a manual place; to save a search
   result, copy both from `/geocode` together. The same result twice in one
-  Trip is 409 `PLACE_DUPLICATE`.
+  Trip is 409 `PLACE_DUPLICATE`. A `provider` other than the server's current
+  geocoder (or any provider while search is disabled) is 422 on
+  `["body","provider"]`; existing places are unaffected.
 - Deleting a place keeps linked itinerary items and their `location` text;
   only the internal association is cleared. Itinerary responses do not yet
   expose `place_id`.

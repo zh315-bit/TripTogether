@@ -29,13 +29,47 @@ type Props = {
   label: string
 }
 
-export function tileUrl(): string {
-  const value = import.meta.env.VITE_MAP_TILE_URL?.trim()
-  // Only HTTPS templates with all placeholders; anything else uses the default.
-  if (value && value.startsWith('https://') && ['{z}', '{x}', '{y}'].every((part) => value.includes(part))) {
-    return value
+export type TileConfig = { url: string; attribution: string }
+
+const OSM_TILES: TileConfig = { url: DEFAULT_TILE_URL, attribution: OSM_ATTRIBUTION }
+let warned = false
+
+function warnOnce(message: string) {
+  if (warned) return
+  warned = true
+  console.warn(message)
+}
+
+/** Test hook: the fallback warning is otherwise logged once per page load. */
+export function resetTileConfigWarning() {
+  warned = false
+}
+
+export function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] ?? char
+  ))
+}
+
+/**
+ * Tiles and their credit travel together: a custom VITE_MAP_TILE_URL needs a
+ * VITE_MAP_TILE_ATTRIBUTION, otherwise the map falls back to OSM tiles with
+ * the OSM credit so it is never shown uncredited. The custom credit is plain
+ * text; Leaflet renders attribution as HTML, so it is escaped first.
+ */
+export function tileConfig(): TileConfig {
+  const url = import.meta.env.VITE_MAP_TILE_URL?.trim()
+  const attribution = import.meta.env.VITE_MAP_TILE_ATTRIBUTION?.trim()
+  if (!url) return OSM_TILES
+  if (!url.startsWith('https://') || !['{z}', '{x}', '{y}'].every((part) => url.includes(part))) {
+    warnOnce('VITE_MAP_TILE_URL must be an HTTPS template with {z}, {x} and {y}; using OpenStreetMap tiles.')
+    return OSM_TILES
   }
-  return DEFAULT_TILE_URL
+  if (!attribution) {
+    warnOnce('VITE_MAP_TILE_URL is set without VITE_MAP_TILE_ATTRIBUTION; using OpenStreetMap tiles.')
+    return OSM_TILES
+  }
+  return { url, attribution: escapeHtml(attribution) }
 }
 
 function textElement(tag: string, className: string, value: string): HTMLElement {
@@ -56,12 +90,20 @@ export function LeafletMap({ markers, lines, onPick, label }: Props) {
   const layers = useRef<L.LayerGroup | null>(null)
 
   useEffect(() => {
-    if (!container.current) return
-    const instance = L.map(container.current, { center: [20, 0], zoom: 2, worldCopyJump: true })
-    L.tileLayer(tileUrl(), { attribution: OSM_ATTRIBUTION, maxZoom: 19 }).addTo(instance)
+    const element = container.current
+    if (!element) return
+    const instance = L.map(element, { center: [20, 0], zoom: 2, worldCopyJump: true })
+    const tiles = tileConfig()
+    L.tileLayer(tiles.url, { attribution: tiles.attribution, maxZoom: 19 }).addTo(instance)
     layers.current = L.layerGroup().addTo(instance)
     map.current = instance
+    // Leaflet measures its container once; layout changes (sidebar wrap, rotation,
+    // breakpoints) would otherwise leave grey, unloaded tile areas.
+    const observer = typeof ResizeObserver === 'undefined'
+      ? null : new ResizeObserver(() => instance.invalidateSize())
+    observer?.observe(element)
     return () => {
+      observer?.disconnect()
       instance.remove()
       map.current = null
       layers.current = null
