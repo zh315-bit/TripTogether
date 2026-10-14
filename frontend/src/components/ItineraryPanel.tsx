@@ -136,13 +136,21 @@ export function ItineraryPanel({ trip }: Props) {
     const group = grouped.find(([day]) => day === date)?.[1] ?? []
     const target = index + direction
     if (target < 0 || target >= group.length) return
-    const ids = group.map((item) => item.id)
+    const shown = group.map((item) => item.id)
+    const ids = [...shown]
     ;[ids[index], ids[target]] = [ids[target], ids[index]]
+    setMessage('')
     try {
-      const updated = await reorderItinerary(request, String(trip.id), date, ids)
+      const updated = await reorderItinerary(request, String(trip.id), date, ids, shown)
       setItems((current) => [...current.filter((item) => item.date !== date), ...updated]
         .sort((a, b) => a.date.localeCompare(b.date) || a.position - b.position))
     } catch (error) {
+      if (error instanceof ApiError && error.code === 'ITINERARY_CONFLICT') {
+        // Another member changed this day; show their version instead of retrying.
+        setMessage('This day was changed by another member. The latest itinerary has been loaded.')
+        await load()
+        return
+      }
       setMessage(error instanceof ApiError ? error.message : 'Could not reorder itinerary.')
     }
   }

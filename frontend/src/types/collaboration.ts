@@ -29,6 +29,7 @@ export type ItineraryItem = {
   start_time: string | null
   end_time: string | null
   notes: string | null
+  place_id: number | null
   position: number
   created_by_user_id: number
   created_at: string

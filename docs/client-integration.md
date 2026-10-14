@@ -280,8 +280,13 @@ annotate or delete any place in the Trip; others get the usual hidden 404.
 ## Routes and Optimization (Map P4)
 
 - Link an itinerary item to a pool place with `place_id` on create or PATCH
-  (`null` unlinks). If `location` is omitted on create, it becomes the place
-  name. Map coordinates always come from the place, never from `location`.
+  (`null` unlinks). `location` is a text snapshot of the place name:
+  - create with `place_id` and no `location`: location becomes the place name;
+  - PATCH switching to a different `place_id` without sending `location`:
+    location becomes the new place's name;
+  - PATCH re-sending the same `place_id`, unlinking with `null`, or sending
+    `location` explicitly (including `null`): the given/current location stays.
+  Map coordinates always come from the place, never from `location`.
 - `GET /itinerary/route?date=` returns ordered `stops`, `legs` with
   `distance_km`, `total_distance_km` and `unlocated_item_ids`. Label these as
   "straight-line distance"; never as driving, walking or travel time.

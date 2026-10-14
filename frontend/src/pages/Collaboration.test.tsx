@@ -15,7 +15,8 @@ const member = {
 }
 const item = {
   id: 9, trip_id: 12, title: 'Temple', location: 'Asakusa', date: '2027-06-10',
-  start_time: '09:30:00', end_time: null, notes: null, position: 1, created_by_user_id: 7,
+  start_time: '09:30:00', end_time: null, notes: null, place_id: null, position: 1,
+  created_by_user_id: 7,
   created_at: '2026-09-20T00:00:00Z', updated_at: '2026-09-20T00:00:00Z',
 }
 const invitation = {
@@ -56,6 +57,37 @@ describe('collaboration and itinerary UI', () => {
       'http://backend.test/api/v1/trips/12/itinerary',
       expect.objectContaining({ method: 'POST' }),
     ])
+  })
+
+  it('reorders with the shown order and reloads after a conflict without retrying', async () => {
+    const second = { ...item, id: 10, title: 'Dinner', position: 2 }
+    const latest = [{ ...second, position: 1 }, { ...item, position: 2 }, { ...item, id: 11, title: 'Late', position: 3 }]
+    let listCalls = 0
+    const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET'
+      if (url.endsWith('/health')) return json({ status: 'ok' })
+      if (url.endsWith('/me')) return json(user)
+      if (url.endsWith('/itinerary/reorder')) return json({ error: {
+        code: 'ITINERARY_CONFLICT', message: 'The itinerary order changed; review it and retry', details: [],
+      } }, 409)
+      if (url.endsWith('/itinerary') && method === 'GET') {
+        listCalls += 1
+        return json(listCalls === 1 ? [item, second] : latest)
+      }
+      if (url.endsWith('/trips/12')) return json(trip)
+      return json([])
+    })
+    mount('/trips/12', fetcher)
+    await userEvent.click(await screen.findByRole('tab', { name: 'Itinerary' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Move Temple down' }))
+    expect(await screen.findByText(/changed by another member/)).toBeInTheDocument()
+    expect(await screen.findByText('Late')).toBeInTheDocument()
+    const reorders = fetcher.mock.calls.filter(([url]) => String(url).endsWith('/reorder'))
+    expect(reorders).toHaveLength(1)
+    expect(JSON.parse(String(reorders[0][1]?.body))).toEqual({
+      date: '2027-06-10', item_ids: [10, 9], expected_item_ids: [9, 10],
+    })
+    expect(listCalls).toBe(2)
   })
 
   it('accepts a pending invitation from the dashboard inbox', async () => {

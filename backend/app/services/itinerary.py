@@ -139,7 +139,11 @@ def update_item(
         item = find_item(db, trip_id, item_id)
         changes = payload.model_dump(exclude_unset=True)
         if changes.get("place_id") is not None:
-            validate_place(db, trip_id, changes["place_id"])
+            place = validate_place(db, trip_id, changes["place_id"])
+            # Switching to another place refreshes the snapshot unless the client sent
+            # its own location. Unlinking (null) or re-sending the same place keeps it.
+            if changes["place_id"] != item.place_id and "location" not in changes:
+                changes["location"] = place.name
         day = changes.get("date", item.date)
         validate_date(trip, day)
         try:

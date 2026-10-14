@@ -88,6 +88,34 @@ def test_place_from_another_trip_is_rejected(shared):
     assert conn.scalar(select(ItineraryItem.place_id).where(ItineraryItem.id == own["id"])) is None
 
 
+def test_switching_place_refreshes_location_unless_sent(shared):
+    client, _, _, users, trip = shared
+    ah = users["alice"][1]
+    first = place(shared, "Senso-ji", 0)
+    second = place(shared, "Tokyo Tower", 1)
+    third = place(shared, "Shibuya", 2)
+    linked = item(shared, "Visit", first["id"])
+    path = f"{api(trip)}/itinerary/{linked['id']}"
+    # Another place, no location in the request: location follows the new place.
+    switched = client.patch(path, headers=ah, json={"place_id": second["id"]}).json()
+    assert switched["place_id"] == second["id"] and switched["location"] == "Tokyo Tower"
+    # Re-sending the same place keeps a hand-edited location.
+    client.patch(path, headers=ah, json={"location": "Observation deck"})
+    same = client.patch(path, headers=ah, json={"place_id": second["id"]}).json()
+    assert same["location"] == "Observation deck"
+    # An explicit location in the same request wins, including null.
+    explicit = client.patch(path, headers=ah, json={"place_id": third["id"], "location": "Scramble"}).json()
+    assert explicit["place_id"] == third["id"] and explicit["location"] == "Scramble"
+    cleared = client.patch(path, headers=ah, json={"place_id": first["id"], "location": None}).json()
+    assert cleared["place_id"] == first["id"] and cleared["location"] is None
+    # Unlinking keeps the location; linking a previously unlinked item fills it.
+    client.patch(path, headers=ah, json={"location": "Kept"})
+    unlinked = client.patch(path, headers=ah, json={"place_id": None}).json()
+    assert unlinked["place_id"] is None and unlinked["location"] == "Kept"
+    relinked = client.patch(path, headers=ah, json={"place_id": second["id"]}).json()
+    assert relinked["location"] == "Tokyo Tower"
+
+
 @pytest.mark.parametrize("value", [0, -1, "1", True, 1.5, 2147483648])
 def test_place_id_is_strict(shared, value):
     client, _, _, users, trip = shared
