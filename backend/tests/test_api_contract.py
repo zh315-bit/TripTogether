@@ -44,15 +44,16 @@ def test_openapi_is_complete_and_unique():
         assert client.get("/docs").status_code == 200
     operations = [(path, method, operation) for path, methods in spec["paths"].items()
                   for method, operation in methods.items()]
-    assert len(operations) == 27
-    assert sum(path.startswith(PREFIX + "/") for path, _, _ in operations) == 25
+    assert len(operations) == 32
+    assert sum(path.startswith(PREFIX + "/") for path, _, _ in operations) == 30
     ids = [op["operationId"] for _, _, op in operations]
     assert len(ids) == len(set(ids))
     assert set(spec["paths"]) >= {
         PREFIX + "/auth/register", PREFIX + "/auth/login", PREFIX + "/auth/me",
         PREFIX + "/trips", PREFIX + "/invitations", PREFIX + "/trips/{trip_id}/members",
         PREFIX + "/trips/{trip_id}/itinerary", PREFIX + "/trips/{trip_id}/expenses",
-        PREFIX + "/trips/{trip_id}/balances", "/health", "/ready",
+        PREFIX + "/trips/{trip_id}/balances", PREFIX + "/trips/{trip_id}/places",
+        PREFIX + "/trips/{trip_id}/places/{place_id}", "/health", "/ready",
     }
     for path, method, op in operations:
         assert op["tags"] and op["summary"]
@@ -90,7 +91,7 @@ def test_every_protected_v1_operation_rejects_anonymous_before_database():
                         error_contract(response, 401, "INVALID_CREDENTIALS")
                         assert response.headers["www-authenticate"] == "Bearer"
                         checked += 1
-            assert checked == 23
+            assert checked == 28
     finally:
         app.dependency_overrides.pop(get_db, None)
 

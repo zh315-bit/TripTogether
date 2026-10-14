@@ -3500,3 +3500,21 @@ PostgreSQL **600 passed, 0 failed**.
 
 P2 may begin only after the user confirms P1. Implement P2 from the separately
 confirmed plan, retaining service authorization and same-Trip place checks.
+
+## 2026-10-14 — Collaborative Map P2: Trip Place CRUD
+
+Added five versioned-only endpoints under `/api/v1/trips/{trip_id}/places`
+(create, list, detail, patch, delete). Owner and accepted members have full
+CRUD; others get hidden 404. Places are scoped by trip_id and place_id; writes
+lock the Trip row. Coordinates are JSON numbers (max six decimals) and are
+immutable; PATCH accepts name/address/note only. Server sets proposer and
+provider fields. No migration, frontend, dependency or geocoding change.
+Details: `docs/map-p2-review.md`.
+
+Verification: new P2 suite plus updated API contract counts (32 operations,
+30 versioned, 28 protected). Full backend suite with PostgreSQL: **652 passed,
+0 failed**.
+
+### Next Step
+
+P3: geocoding proxy (Nominatim provider, global throttle, cache, kill switch).

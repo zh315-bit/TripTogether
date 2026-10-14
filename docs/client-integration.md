@@ -240,3 +240,23 @@ Manual API requests commit to the development database; tests use isolated
 PostgreSQL schemas. To simulate outage without stopping shared PostgreSQL,
 start a separate development server with DATABASE_URL pointing to a known
 unused local port: health stays200, ready returns503. Restore config afterward.
+
+## Trip Places (Map P2)
+
+`/api/v1/trips/{trip_id}/places` is a shared pool of candidate places, available
+only under `/api/v1`. Any owner or accepted member may create, read, rename,
+annotate or delete any place in the Trip; others get the usual hidden 404.
+
+- Create requires `name`, `latitude`, `longitude` as JSON numbers (at most six
+  decimal places; latitude -90..90, longitude -180..180). `address` and `note`
+  are optional. Strings such as `"35.1"`, booleans, NaN and Infinity are 422.
+- Responses return coordinates as JSON numbers, unlike money strings.
+- Coordinates are immutable. PATCH accepts only `name`, `address`, `note`;
+  `address`/`note` clear with null, `name` cannot be null. To move a place,
+  delete it and create a new one.
+- The server sets `proposed_by_user_id` (used for per-member map colors),
+  `provider` (`manual` in P2) and `provider_place_id` (null). Clients cannot
+  send them.
+- Deleting a place keeps linked itinerary items and their `location` text;
+  only the internal association is cleared. Itinerary responses do not yet
+  expose `place_id`.

@@ -14,6 +14,7 @@ from app.api.invitations import router as invitations_router
 from app.api.itinerary import router as itinerary_router
 from app.api.expenses import router as expenses_router
 from app.api.balances import router as balances_router
+from app.api.trip_places import router as trip_places_router
 from app.api.system import router as system_router
 from app.core.config import get_app_settings, get_database_url, get_jwt_settings
 from app.core.logging import SafeErrorMiddleware, configure_logging
@@ -53,6 +54,7 @@ def create_app() -> FastAPI:
                 ("itinerary", "Shared items and complete daily ordering"),
                 ("expenses", "Single-currency expenses with exact stored splits"),
                 ("balances", "Read-only balances and suggested settlements"),
+                ("places", "Shared candidate places; coordinates fixed after creation"),
                 ("system", "Liveness and readiness"),
             )
         ],
@@ -65,6 +67,8 @@ def create_app() -> FastAPI:
                    expenses_router, balances_router):
         application.include_router(router, include_in_schema=False)
         versioned.include_router(router)
+    # New resources are versioned only; they have no legacy alias.
+    versioned.include_router(trip_places_router)
     # Existing routers describe legacy errors; v1 documents the new envelope.
     for route in versioned.routes:
         if isinstance(route, APIRoute) and route.path.startswith("/api/v1/"):

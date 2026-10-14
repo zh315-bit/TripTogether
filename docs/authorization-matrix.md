@@ -14,10 +14,11 @@ check, not a role value supplied by the client.
 | Itinerary create/list/detail/update/delete/reorder | Yes | Yes | 404 | 404 | 401 |
 | Expense create/list/detail/update/delete | Yes | Yes | 404 | 404 | 401 |
 | Balance read | Yes | Yes | 404 | 404 | 401 |
+| Place create/list/detail/update/delete | Yes | Yes | 404 | 404 | 401 |
 
 `Owner` means `trips.owner_id == current_user.id`. `Member` means an accepted
 membership row, not merely a pending invitation. A member may edit/delete
-another participant's itinerary or expense: this is intentional collaboration,
+another participant's itinerary, expense or place: this is intentional collaboration,
 not creator-only ownership.
 
 ## Operations Not Determined by Trip Role
@@ -47,11 +48,11 @@ path/body data may independently produce 422.
 ## Code and Coverage
 
 - `app/api/dependencies.py`: token validation before database lookup, shared
-  `get_current_user`; all 23 protected formal operations audited.
+  `get_current_user`; all 28 protected formal operations audited.
 - `app/services/trips.py`: `accessible_to` uses Owner OR EXISTS membership;
   `get_owned_trip` is stricter. SQL filters apply before rows are returned.
-- Invitation, itinerary and expense services scope child IDs to their Trip.
-- `tests/test_api_contract.py`: all 23 protected operations reject anonymous
+- Invitation, itinerary, expense and place services scope child IDs to their Trip.
+- `tests/test_api_contract.py`: all 28 protected operations reject anonymous
   callers before DB access; real v1 workflow checks pending/outsider/member/
   recipient/owner boundaries.
 - Existing Step 6-10 suites retain full role, cross-trip child-ID, rollback

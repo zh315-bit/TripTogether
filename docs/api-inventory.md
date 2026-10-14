@@ -45,8 +45,8 @@ is recipient identity, not a Trip role. Forbidden resources remain hidden404.
 
 ## Official Client API After Step 11
 
-27 documented operations: Auth3, Trips5, Members1, Invitations4, Itinerary6,
-Expenses5, Balances1, System2. Counts are method/path pairs, not distinct URLs.
+32 documented operations: Auth3, Trips5, Members1, Invitations4, Itinerary6,
+Expenses5, Balances1, Places5, System2. Counts are method/path pairs, not distinct URLs.
 All official success schemas retain their original fields. All listed errors
 use APIErrorResponse; generic unexpected500 and infrastructure503 can occur on
 business operations. Framework unknown-path404 and wrong-method405 use the
@@ -81,13 +81,23 @@ same envelope inside `/api/v1`.
 | PATCH | /api/v1/trips/{trip_id}/expenses/{expense_id} | JWT | Owner/Member | ExpenseUpdate | 200 ExpenseResponse | 401,404,409,422,503 |
 | DELETE | /api/v1/trips/{trip_id}/expenses/{expense_id} | JWT | Owner/Member | None | 204 empty | 401,404,422,503 |
 | GET | /api/v1/trips/{trip_id}/balances | JWT | Owner/Member | None | 200 BalanceResponse | 401,404,409,422,503 |
+| POST | /api/v1/trips/{trip_id}/places | JWT | Owner/Member | TripPlaceCreate | 201 TripPlaceResponse | 401,404,422,503 |
+| GET | /api/v1/trips/{trip_id}/places | JWT | Owner/Member | None | 200 TripPlaceResponse[] | 401,404,422,503 |
+| GET | /api/v1/trips/{trip_id}/places/{place_id} | JWT | Owner/Member | None | 200 TripPlaceResponse | 401,404,422,503 |
+| PATCH | /api/v1/trips/{trip_id}/places/{place_id} | JWT | Owner/Member | TripPlaceUpdate | 200 TripPlaceResponse | 401,404,422,503 |
+| DELETE | /api/v1/trips/{trip_id}/places/{place_id} | JWT | Owner/Member | None | 204 empty | 401,404,422,503 |
+
+Places (map P2) are versioned-only and have no legacy alias. Coordinates are
+JSON numbers with at most six decimal places and are immutable after creation;
+PATCH accepts only name, address and note. `proposed_by_user_id` is set from the
+authenticated user. Error codes: PLACE_NOT_FOUND (404), PLACES_UNAVAILABLE (503).
 
 ## Compatibility and Documentation Routes
 
 Every business row in the pre-change table remains reachable without `/api/v1`,
 with identical role/request/success rules and legacy `{"detail": ...}` errors.
 There are25 such hidden aliases, not a second set of business logic.
-Runtime has52 API operations (27 official +25 legacy) and four framework
+Runtime has57 API operations (32 official +25 legacy) and four framework
 documentation routes; `/health` is not duplicated. No `/api/v1/health` alias.
 There is no `/readiness`; the selected path is `/ready`.
 
