@@ -75,7 +75,7 @@ The root `.env` configures the server: `DATABASE_URL`, `JWT_SECRET_KEY`, `JWT_AL
 
 ## Deployment
 
-TripTogether is deployed with a static frontend build, a non-reloading FastAPI process, and hosted PostgreSQL. The browser calls the backend's public HTTPS origin; the backend connects to PostgreSQL through its private connection string. The project owner confirmed production registration after migration to `0005 (head)`.
+TripTogether is deployed with a static frontend build, a non-reloading FastAPI process, and hosted PostgreSQL. The browser calls the backend's public HTTPS origin; the backend connects to PostgreSQL through its private connection string. The project owner confirmed production registration after migration to `0005 (head)`; the collaborative-map release requires `0007 (head)` and PostgreSQL 15+ (see the [schema release procedure](docs/step20-production-deployment.md#releasing-a-schema-change-render-free--auto-deploy)).
 
 ```text
 Browser → static frontend → public HTTPS API → hosted PostgreSQL
@@ -110,7 +110,7 @@ replica run migrations on boot. On a Render plan with a Pre-Deploy Command, use
 it as one controlled migration step. Render Free has no Pre-Deploy Command, so
 run the migration manually from a trusted environment with the Render database
 URL supplied as an environment variable. Verify `alembic current` reports
-`0005 (head)` for this release. Never put the URL in a committed file or shell
+`0007 (head)` for this release. Never put the URL in a committed file or shell
 history. After migration succeeds, start the API without reload:
 
 ```bash

@@ -3698,3 +3698,17 @@ depends on runtime configuration should not be frozen into constraints.
 ### Next Step
 
 User browser acceptance, then push `feature/collaborative-map` and open the PR.
+
+## 2026-10-14 — Map Release Deployment Docs
+
+Updated `docs/step20-production-deployment.md`, `docs/deployment-checklist.md`
+and `README.md` for the map release: `alembic current` now expects
+`0007 (head)`, `/ready` checks nine tables, PostgreSQL must be 15+, and the
+Render/Vercel tables list `GEOCODER_*` and `VITE_MAP_TILE_*` with required
+values and default meanings. Added a "Releasing a schema change (Render Free +
+auto-deploy)" procedure (version check → backup → health check `/health` →
+manual migrate → merge → restore `/ready` → smoke test) and a rollback path.
+Its safety claim was verified by running the `main` backend against a 0007
+schema: all business flows passed and only `/ready` returned 503. Historical
+`0005 (head)` and "seven tables" statements in earlier RECORD entries are
+records of past steps and were intentionally left unchanged.
