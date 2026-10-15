@@ -30,3 +30,6 @@ frontend/.env.*
 .vscode/
 .DS_Store
 ._*
+
+# Local Claude Code launch/preview configuration
+.claude/

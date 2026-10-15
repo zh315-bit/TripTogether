@@ -31,6 +31,13 @@ function nullableText(value: unknown, field: string): string | null {
   return value
 }
 
+function nullableNumber(value: unknown, field: string): number | null {
+  if (value !== null && typeof value !== 'number') {
+    throw new ApiError(200, 'INVALID_RESPONSE', `Unexpected collaboration field: ${field}.`)
+  }
+  return value
+}
+
 function parseMember(body: unknown): TripMember {
   const value = object(body)
   return {
@@ -71,6 +78,7 @@ function parseItineraryItem(body: unknown): ItineraryItem {
     start_time: nullableText(value.start_time, 'start_time'),
     end_time: nullableText(value.end_time, 'end_time'),
     notes: nullableText(value.notes, 'notes'),
+    place_id: nullableNumber(value.place_id, 'place_id'),
     position: number(value.position, 'position'),
     created_by_user_id: number(value.created_by_user_id, 'created_by_user_id'),
     created_at: text(value.created_at, 'created_at'),
@@ -159,15 +167,21 @@ export function deleteItineraryItem(
   })
 }
 
+// expectedItemIds is the order the user last saw; the backend answers 409
+// ITINERARY_CONFLICT if another member changed the day in the meantime.
 export async function reorderItinerary(
   request: AuthenticatedRequest, tripId: string, date: string, itemIds: number[],
+  expectedItemIds?: number[],
 ): Promise<ItineraryItem[]> {
   return parseList(await request<unknown>(
     `/api/v1/trips/${encodeURIComponent(tripId)}/itinerary/reorder`,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date, item_ids: itemIds }),
+      body: JSON.stringify({
+        date, item_ids: itemIds,
+        ...(expectedItemIds ? { expected_item_ids: expectedItemIds } : {}),
+      }),
     },
   ), parseItineraryItem, 'itinerary')
 }

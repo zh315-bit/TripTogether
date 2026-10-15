@@ -240,3 +240,82 @@ Manual API requests commit to the development database; tests use isolated
 PostgreSQL schemas. To simulate outage without stopping shared PostgreSQL,
 start a separate development server with DATABASE_URL pointing to a known
 unused local port: health stays200, ready returns503. Restore config afterward.
+
+## Trip Places (Map P2)
+
+`/api/v1/trips/{trip_id}/places` is a shared pool of candidate places, available
+only under `/api/v1`. Any owner or accepted member may create, read, rename,
+annotate or delete any place in the Trip; others get the usual hidden 404.
+
+- Create requires `name`, `latitude`, `longitude` as JSON numbers (at most six
+  decimal places; latitude -90..90, longitude -180..180). `address` and `note`
+  are optional. Strings such as `"35.1"`, booleans, NaN and Infinity are 422.
+- Responses return coordinates as JSON numbers, unlike money strings.
+- Coordinates are immutable. PATCH accepts only `name`, `address`, `note`;
+  `address`/`note` clear with null, `name` cannot be null. To move a place,
+  delete it and create a new one.
+- The server sets `proposed_by_user_id` (used for per-member map colors).
+  Omit `provider`/`provider_place_id` for a manual place; to save a search
+  result, copy both from `/geocode` together. The same result twice in one
+  Trip is 409 `PLACE_DUPLICATE`. A `provider` other than the server's current
+  geocoder (or any provider while search is disabled) is 422 on
+  `["body","provider"]`; existing places are unaffected.
+- Deleting a place keeps linked itinerary items and their `location` text;
+  only the internal association is cleared. Itinerary responses do not yet
+  expose `place_id`.
+
+## Place Search (Map P3)
+
+`GET /api/v1/geocode?q=...&limit=5` (authenticated) proxies place search.
+
+- Call it only on an explicit user action (Search button or Enter). Never
+  call it per keystroke: autocomplete is forbidden by the Nominatim policy.
+- 429 `GEOCODER_BUSY` with `Retry-After: 1` (exposed to cross-origin
+  browsers via `Access-Control-Expose-Headers`) means the application-wide
+  one-per-second budget is in use; show "busy, try again" and let the user
+  retry. Do not retry automatically in a loop.
+- 503 `GEOCODER_DISABLED` means the operator turned search off; manual
+  places still work. 503 `GEOCODER_UNAVAILABLE` is a temporary upstream failure.
+- Results: `provider`, `provider_place_id`, `name`, `address`, `latitude`,
+  `longitude` (JSON numbers, six decimal places). Show the attribution
+  "Search data © OpenStreetMap contributors" near the results.
+
+## Routes and Optimization (Map P4)
+
+- Link an itinerary item to a pool place with `place_id` on create or PATCH
+  (`null` unlinks). `location` is a text snapshot of the place name:
+  - create with `place_id` and no `location`: location becomes the place name;
+  - PATCH switching to a different `place_id` without sending `location`:
+    location becomes the new place's name;
+  - PATCH re-sending the same `place_id`, unlinking with `null`, or sending
+    `location` explicitly (including `null`): the given/current location stays.
+  Map coordinates always come from the place, never from `location`.
+- `GET /itinerary/route?date=` returns ordered `stops`, `legs` with
+  `distance_km`, `total_distance_km` and `unlocated_item_ids`. Label these as
+  "straight-line distance"; never as driving, walking or travel time.
+- `POST /itinerary/optimize {"date", "keep_first": true}` returns a suggestion
+  only. Show original vs proposed distance and order; label it "suggested
+  order (shorter straight-line path)", never "shortest route".
+- To apply, send `PATCH /itinerary/reorder` with `item_ids` =
+  `proposed_item_ids` and `expected_item_ids` = `original_item_ids`. On 409
+  `ITINERARY_CONFLICT`, tell the user the day changed and re-run the preview.
+  Repeating the same apply is a harmless 200. Cancel sends nothing.
+
+## Web Client Map Tab (Map P5)
+
+The React client implements the guidance above in `src/components/map/`:
+
+- Search sends one request per submit (button/Enter), disables the button while
+  in flight, and counts down from `Retry-After` after 429. `ApiError.retryAfter`
+  carries the parsed delay. 503 messages distinguish "turned off" (use manual
+  places) from "temporarily unavailable".
+- Results are saved with `provider`/`provider_place_id` unchanged; 409
+  `PLACE_DUPLICATE` reads "already in the place pool".
+- Manual places take a name plus coordinates typed (max six decimals) or picked
+  by clicking the map. Delete uses an in-page confirmation that explains
+  automatic unlinking.
+- Member colour = position in `GET /members`, with the initial and name always
+  shown alongside the colour.
+- Day route, optimize preview, apply with `expected_item_ids`, and 409 reload
+  without retry follow the Routes section above. The itinerary panel's manual
+  up/down reorder also sends `expected_item_ids`.

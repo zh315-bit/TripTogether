@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import { deleteTrip, getTrip, updateTrip } from '../api/trips'
@@ -9,6 +9,9 @@ import { ExpensePanel } from '../components/ExpensePanel'
 import { BalancePanel } from '../components/BalancePanel'
 import { useAuth } from '../auth/AuthContext'
 import type { Trip, TripInput } from '../types/trip'
+
+// Leaflet and the map UI load only when the Map tab is first opened.
+const MapPanel = lazy(() => import('../components/map/MapPanel'))
 
 export function TripDetailPage() {
   const { tripId } = useParams()
@@ -21,8 +24,8 @@ export function TripDetailPage() {
   const [deleting, setDeleting] = useState(false)
   const [deleteMessage, setDeleteMessage] = useState('')
   const [balanceRefreshKey, setBalanceRefreshKey] = useState(0)
-  const [activeTab, setActiveTab] = useState<'overview' | 'itinerary' | 'expenses' | 'members'>('overview')
-  const tabs = ['overview', 'itinerary', 'expenses', 'members'] as const
+  const tabs = ['overview', 'itinerary', 'map', 'expenses', 'members'] as const
+  const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>('overview')
 
   const load = useCallback(async () => {
     if (!tripId) return
@@ -112,6 +115,9 @@ export function TripDetailPage() {
           <dl className="overview-facts"><div><dt>Destination</dt><dd>{trip.destination}</dd></div><div><dt>Dates</dt><dd>{trip.start_date} – {trip.end_date}</dd></div><div><dt>Your role</dt><dd>{owner ? 'Trip owner' : 'Trip member'}</dd></div></dl>
         </section>}
         {activeTab === 'itinerary' && <ItineraryPanel trip={trip} />}
+        {activeTab === 'map' && <Suspense fallback={<p role="status">Loading map...</p>}>
+          <MapPanel trip={trip} />
+        </Suspense>}
         {activeTab === 'expenses' && <><ExpensePanel
           tripId={String(trip.id)}
           onChanged={() => setBalanceRefreshKey((value) => value + 1)}

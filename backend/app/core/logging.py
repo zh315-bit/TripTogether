@@ -15,6 +15,9 @@ def configure_logging() -> None:
     logger.setLevel(logging.INFO)
     # Raw access URLs can contain client-supplied secrets in paths/query strings.
     logging.getLogger("uvicorn.access").disabled = True
+    # httpx logs full request URLs at INFO; geocoding URLs carry user search text.
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
 
 
 class SafeErrorMiddleware:

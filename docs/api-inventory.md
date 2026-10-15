@@ -28,7 +28,7 @@ Step 11 implementation前，直接遍历实际 FastAPI APIRoute 并阅读所有 
 | GET | /trips/{trip_id}/itinerary/{item_id} | JWT | Owner/Member | None | 200 ItineraryItemResponse | 401,404,422,503 |
 | PATCH | /trips/{trip_id}/itinerary/{item_id} | JWT | Owner/Member | ItineraryItemUpdate | 200 ItineraryItemResponse | 401,404,422,503 |
 | DELETE | /trips/{trip_id}/itinerary/{item_id} | JWT | Owner/Member | None | 204 empty | 401,404,422,503 |
-| PATCH | /trips/{trip_id}/itinerary/reorder | JWT | Owner/Member | ItineraryReorderRequest | 200 ItineraryItemResponse[] | 401,404,422,503 |
+| PATCH | /trips/{trip_id}/itinerary/reorder | JWT | Owner/Member | ItineraryReorderRequest | 200 ItineraryItemResponse[] | 401,404,409,422,503 |
 | POST | /trips/{trip_id}/expenses | JWT | Owner/Member | ExpenseCreate | 201 ExpenseResponse | 401,404,409,422,503 |
 | GET | /trips/{trip_id}/expenses | JWT | Owner/Member | None | 200 ExpenseResponse[] | 401,404,422,503 |
 | GET | /trips/{trip_id}/expenses/{expense_id} | JWT | Owner/Member | None | 200 ExpenseResponse | 401,404,422,503 |
@@ -45,8 +45,8 @@ is recipient identity, not a Trip role. Forbidden resources remain hidden404.
 
 ## Official Client API After Step 11
 
-27 documented operations: Auth3, Trips5, Members1, Invitations4, Itinerary6,
-Expenses5, Balances1, System2. Counts are method/path pairs, not distinct URLs.
+35 documented operations: Auth3, Trips5, Members1, Invitations4, Itinerary8,
+Expenses5, Balances1, Places5, Geocoding1, System2. Counts are method/path pairs, not distinct URLs.
 All official success schemas retain their original fields. All listed errors
 use APIErrorResponse; generic unexpected500 and infrastructure503 can occur on
 business operations. Framework unknown-path404 and wrong-method405 use the
@@ -74,20 +74,50 @@ same envelope inside `/api/v1`.
 | GET | /api/v1/trips/{trip_id}/itinerary/{item_id} | JWT | Owner/Member | None | 200 ItineraryItemResponse | 401,404,422,503 |
 | PATCH | /api/v1/trips/{trip_id}/itinerary/{item_id} | JWT | Owner/Member | ItineraryItemUpdate | 200 ItineraryItemResponse | 401,404,422,503 |
 | DELETE | /api/v1/trips/{trip_id}/itinerary/{item_id} | JWT | Owner/Member | None | 204 empty | 401,404,422,503 |
-| PATCH | /api/v1/trips/{trip_id}/itinerary/reorder | JWT | Owner/Member | ItineraryReorderRequest | 200 ItineraryItemResponse[] | 401,404,422,503 |
+| PATCH | /api/v1/trips/{trip_id}/itinerary/reorder | JWT | Owner/Member | ItineraryReorderRequest | 200 ItineraryItemResponse[] | 401,404,409,422,503 |
+| GET | /api/v1/trips/{trip_id}/itinerary/route?date= | JWT | Owner/Member | Query date | 200 RouteResponse | 401,404,422,503 |
+| POST | /api/v1/trips/{trip_id}/itinerary/optimize | JWT | Owner/Member | ItineraryOptimizeRequest | 200 ItineraryOptimizeResponse | 401,404,422,503 |
 | POST | /api/v1/trips/{trip_id}/expenses | JWT | Owner/Member | ExpenseCreate | 201 ExpenseResponse | 401,404,409,422,503 |
 | GET | /api/v1/trips/{trip_id}/expenses | JWT | Owner/Member | None | 200 ExpenseResponse[] | 401,404,422,503 |
 | GET | /api/v1/trips/{trip_id}/expenses/{expense_id} | JWT | Owner/Member | None | 200 ExpenseResponse | 401,404,422,503 |
 | PATCH | /api/v1/trips/{trip_id}/expenses/{expense_id} | JWT | Owner/Member | ExpenseUpdate | 200 ExpenseResponse | 401,404,409,422,503 |
 | DELETE | /api/v1/trips/{trip_id}/expenses/{expense_id} | JWT | Owner/Member | None | 204 empty | 401,404,422,503 |
 | GET | /api/v1/trips/{trip_id}/balances | JWT | Owner/Member | None | 200 BalanceResponse | 401,404,409,422,503 |
+| POST | /api/v1/trips/{trip_id}/places | JWT | Owner/Member | TripPlaceCreate | 201 TripPlaceResponse | 401,404,409,422,503 |
+| GET | /api/v1/trips/{trip_id}/places | JWT | Owner/Member | None | 200 TripPlaceResponse[] | 401,404,422,503 |
+| GET | /api/v1/trips/{trip_id}/places/{place_id} | JWT | Owner/Member | None | 200 TripPlaceResponse | 401,404,422,503 |
+| PATCH | /api/v1/trips/{trip_id}/places/{place_id} | JWT | Owner/Member | TripPlaceUpdate | 200 TripPlaceResponse | 401,404,422,503 |
+| DELETE | /api/v1/trips/{trip_id}/places/{place_id} | JWT | Owner/Member | None | 204 empty | 401,404,422,503 |
+| GET | /api/v1/geocode?q=&limit= | JWT | Any user | Query q (2-200), limit (1-10, default 5) | 200 GeocodeResultResponse[] | 401,422,429,503 |
+
+Places (map P2) are versioned-only and have no legacy alias. Coordinates are
+JSON numbers with at most six decimal places and are immutable after creation;
+PATCH accepts only name, address and note. `proposed_by_user_id` is set from the
+authenticated user. A saved search result sends `provider` (`nominatim`, or
+`fake` in development) and
+`provider_place_id` (`N|W|R` + OSM id) together; repeating one inside a Trip is
+409 PLACE_DUPLICATE. `provider` must equal the running `GEOCODER_PROVIDER`
+(only manual places when it is `disabled`); otherwise 422 with a
+`["body","provider"]` reason. Error codes: PLACE_NOT_FOUND (404), PLACE_DUPLICATE (409),
+PLACES_UNAVAILABLE (503). Geocoding codes: GEOCODER_BUSY (429, `Retry-After: 1`),
+GEOCODER_DISABLED and GEOCODER_UNAVAILABLE (503). CORS exposes `Retry-After`
+(`expose_headers`) so a cross-origin browser client can read the delay.
+
+Map P4: itinerary create/update accept optional `place_id` (same Trip only,
+else 422; null unlinks) and responses include `place_id` on both v1 and legacy
+paths. `route` and `optimize` are versioned-only and read-only. Reorder accepts
+optional `expected_item_ids`; if the current order differs from it (and from
+the target), the response is 409 ITINERARY_CONFLICT. Omitting it keeps the
+previous behavior exactly. PATCH switching `place_id` to a different place
+without sending `location` refreshes `location` to the new place name (P5.0).
+The web client (P5) uses every endpoint above; no new endpoint was added.
 
 ## Compatibility and Documentation Routes
 
 Every business row in the pre-change table remains reachable without `/api/v1`,
 with identical role/request/success rules and legacy `{"detail": ...}` errors.
 There are25 such hidden aliases, not a second set of business logic.
-Runtime has52 API operations (27 official +25 legacy) and four framework
+Runtime has60 API operations (35 official +25 legacy) and four framework
 documentation routes; `/health` is not duplicated. No `/api/v1/health` alias.
 There is no `/readiness`; the selected path is `/ready`.
 

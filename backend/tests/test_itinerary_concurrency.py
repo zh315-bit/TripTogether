@@ -68,3 +68,23 @@ def test_trip_shrink_racing_create_preserves_boundary(participants):
     trip = client.get(path, headers=ah).json()
     assert all(trip["start_date"] <= item["date"] <= trip["end_date"]
                for item in client.get(path + "/itinerary", headers=ah).json())
+
+
+def test_concurrent_guarded_reorders_one_wins_one_conflicts(participants):
+    client, engine, _, trip_id, ah, bh = participants
+    path = f"/trips/{trip_id}/itinerary"
+    ids = [client.post(path, headers=ah, json={"title": title, "date": "2027-06-10"}).json()["id"]
+           for title in ("A", "B", "C")]
+    # Both previews were based on the same original order.
+    orders = [ids[::-1], [ids[1], ids[2], ids[0]]]
+    results = simultaneous_requests(engine, [
+        lambda h=h, order=order: client.patch(path + "/reorder", headers=h, json={
+            "date": "2027-06-10", "item_ids": order, "expected_item_ids": ids,
+        })
+        for h, order in zip((ah, bh), orders)
+    ])
+    assert sorted(r.status_code for r in results) == [200, 409]
+    winner = orders[[r.status_code for r in results].index(200)]
+    rows = client.get(path, headers=ah).json()
+    assert [r["id"] for r in rows] == winner
+    assert [r["position"] for r in rows] == [1, 2, 3]
