@@ -3712,3 +3712,99 @@ Its safety claim was verified by running the `main` backend against a 0007
 schema: all business flows passed and only `/ready` returned 503. Historical
 `0005 (head)` and "seven tables" statements in earlier RECORD entries are
 records of past steps and were intentionally left unchanged.
+
+## 2026-10-18 — Production Release: Collaborative Map (PR #1)
+
+### What Was Released
+
+PR #1 (`feature/collaborative-map`, P1–P5) was released to production following
+`docs/step20-production-deployment.md` → "Releasing a schema change". The
+release is live on merge commit `7454394`. Backend: Render `triptogether-api`
+(`srv-dapd8nid0e5s73ff1fs0`), deploy `dep-dbamhtvlk1mc73d1n0j0`, which went
+live at 2026-10-19 00:49:48 UTC. The health check change redeployed the same
+commit as `dep-dbamq50m7kps739fgfh0`, live at 01:07:01 UTC. Frontend: Vercel
+Production deployment for `7454394`, status success. Database: Render Postgres
+`triptogether-db` (`dpg-dapcmd7f3r2c73c8tqmg-a`), PostgreSQL 18.6, migrated
+`0005` → `0007 (head)`.
+
+### Step Results
+
+| Step | Result |
+| --- | --- |
+| A. Read-only checks | Auto-deploy on `main` enabled. Health check path was **empty** (not `/ready` as the runbook assumed). PG 18.6 (≥ 15). `alembic_version` 0005. `/health` 200 (33 s cold start), `/ready` 200. Backend and Vercel both on `eec116e`. |
+| Health check during release | The owner kept it empty: Render only checks the port, so neither the old nor the new `/ready` could block the switch-over. |
+| B5. Backup | See "Backups" below. |
+| B6. Migration | Run manually from the release branch with the project venv: `alembic upgrade head` exit 0, `alembic current` = `0007 (head)`. Confirmed independently with a read-only Render query. |
+| B6. Data check | Row counts identical before and after: users 3, trips 2, trip_members 3, trip_invitations 1, itinerary_items 1, expenses 2, expense_splits 2. `trip_places` and `geocoder_throttle` exist; the throttle has 1 row seeded `-infinity`. `itinerary_items.place_id` is nullable, with composite FK `ON DELETE SET NULL (place_id)`. |
+| B7. Old backend on new schema | `/health` 200, `/ready` 503 `NOT_READY` (expected: old code requires 0005), DB-backed login returned 401 rather than 503. It served normally for about two days until the merge. |
+| C8. Deploy | Merge triggered auto-deploy of `7454394`; live in about 53 s. No failures. |
+| C9. Readiness | `/ready` 200 `{"status":"ready"}`, `/health` 200. Live `openapi.json` contains `/geocode`, `/places`, `/itinerary/route`, `/itinerary/optimize`. |
+| Health check after release | The owner set it to `/ready`. The redeploy that followed passed it. |
+| C10. Smoke test (public API) | 11/11 as expected: register 201, login 200, trip 201, 2 manual places 201, 2 linked items 201 (location snapshot = place name), route 200 (2 stops, 9.13 km), optimize 200, delete trip 204, then 404. Cascade verified: `trip_places` back to 0; other tables unchanged. |
+| C11. Logs | Application logs from build through both deploys are INFO only, with no errors or tracebacks. Request-type logs are not returned for this service, so "no 5xx" rests on the smoke-test codes plus clean application logs. |
+| C12. Credentials file | The agent deleted `backend/.env.production.local` after the release checks. The owner handles production credential files from now on (see "Operating Rule"). |
+
+### Backups
+
+- **First backup: lost; cause not determined.** On 2026-10-16 the agent ran
+  `pg_dump -Fc` (client 18.6) to `~/Desktop/triptogether-before-0007.dump`
+  (29,072 bytes, revision 0005), and `pg_restore -l` read it successfully. By
+  2026-10-18 it was gone, and Spotlight and a home-directory search found
+  nothing. `~/Desktop` had been modified at 2026-10-17 12:13. The agent's
+  shell runs inside Claude Code's sandbox, but the files were checked from the
+  owner's unsandboxed terminal and both views were identical (including a
+  directory the agent created). The sandbox restricts which paths can be
+  reached; it does not redirect writes. The file was on the real disk and was
+  removed later by something that has not been identified.
+- **Second backup: taken by the owner on 2026-10-18 in their own terminal.**
+  `~/Backups/TripTogether/triptogether-0007-20261018.dump`, 35,796 bytes,
+  confirmed in Finder. It is taken after migration (revision `0007`) and
+  includes the smoke-test account. **Keep it**: it is the backup for the
+  upcoming database migration (the Render free database expires 2026-10-22).
+
+### Incidents
+
+- **Partial credential exposure (2026-10-16).** The first `pg_dump` attempt
+  failed because `backend/.env.production.local` held two concatenated URLs.
+  The agent's redaction assumed one well-formed URL, so the error text showed
+  the **first 5 characters of the database password and the server IP** in
+  the agent's output. Nothing was written to files, logs or commits. The owner
+  decided to replace all credentials as part of this week's database
+  migration rather than rotate now. Afterwards the agent's wrapper validated
+  the URL format (exactly one `://` and one `@`) before connecting and printed
+  only exit codes and error categories.
+- **Lost first backup.** See above.
+
+### Test Data Left in Production
+
+`smoke_test_20261018` / `smoke-test-20261018@example.com` (usernames allow only
+letters, digits and underscores, so not hyphens). It owns no data. There is no
+account-deletion API, so it was kept on purpose. Remove it with SQL during the
+database migration.
+
+### Operating Rule From This Release
+
+Any operation that writes to the owner's local disk (database backups,
+production credential files) is run by the owner in their own terminal. The
+agent may prepare commands, run read-only checks through platform tools, and
+verify results, but does not create, move or delete those files.
+
+### Pending
+
+1. **Database expiry:** Render free Postgres `triptogether-db` expires
+   **2026-10-22**. Migrate this week; replace all credentials (see Incidents);
+   restore from the owner's backup; then delete `smoke_test_20261018`.
+2. **Pin the production Python version.** Render builds with its default
+   Python 3.14.3, while CI tests 3.12 and local development uses 3.9. Add a
+   pinned version (for example `.python-version`) and align CI with it.
+3. **Investigate the lost Desktop file** (what changed `~/Desktop` on
+   2026-10-17 12:13), so other files there are not at risk.
+4. Optional: update AGENT.md's "Core tables" list (still seven tables).
+
+### What I Learned
+
+Runbooks need checking against live settings before use (the health check
+path was not what the docs assumed). Redaction that relies on parsing input
+fails exactly when the input is malformed, so validate first and print
+nothing raw. A backup only counts once its owner has confirmed it in a
+location they control.
