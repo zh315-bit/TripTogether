@@ -17,6 +17,12 @@
 .panel-body .itinerary-day { padding-left: 22px; }
 .panel-body .itinerary-row, .panel-body .expense-row, .panel-body .member-row, .panel-body .balance-row, .panel-body .settlement-row { flex-wrap: wrap; }
 .panel-body .map-card { padding: 16px; }
+/* Row actions: compact so names keep the width in a ~400px sidebar. */
+.panel-body :is(.place-row, .itinerary-row, .expense-row, .member-row, .map-result-list li) .actions { flex-wrap: nowrap; gap: 6px; }
+.panel-body :is(.place-row, .itinerary-row, .expense-row, .member-row, .map-result-list li) :is(.retry-button, .danger-button, .primary-button) { min-height: 32px; padding: 4px 10px; border-radius: 8px; font-size: 13px; }
+.panel-body .icon-button { width: 30px; height: 30px; }
+.panel-body .itinerary-row { flex-wrap: nowrap; }
+.panel-body .itinerary-row > div:first-child { flex: 1; }
 .panel-section { display: grid; gap: 14px; }
 .panel-section h3 { margin: 0; }
 .trip-facts { display: grid; gap: 10px; margin: 0; }

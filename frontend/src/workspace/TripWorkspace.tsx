@@ -92,7 +92,8 @@ export default function TripWorkspace({ trip, owner, onTripUpdated, onTripDelete
           <Icon name={item.icon} /><span>{item.label}</span>
         </button>)}
       </div>
-      <section id="workspace-panel" className="panel-body" role="tabpanel" aria-labelledby={`panel-tab-${panel}`}>
+      {/* key: each panel opens scrolled to the top, not where the previous one was. */}
+      <section key={panel} id="workspace-panel" className="panel-body" role="tabpanel" aria-labelledby={`panel-tab-${panel}`}>
         {map.status === 'loading' && <p role="status">Loading trip data...</p>}
         {map.status === 'error' && <div className="inline-error" role="alert"><p>{map.loadMessage}</p>
           <button className="retry-button" type="button" onClick={() => void map.load()}>Try again</button></div>}

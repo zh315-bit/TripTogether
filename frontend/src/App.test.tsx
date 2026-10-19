@@ -7,7 +7,7 @@ describe('Application', () => {
   it('renders the public landing page', () => {
     vi.stubGlobal('fetch', vi.fn())
     render(<App />)
-    expect(screen.getByRole('heading', { name: 'Plan together.Travel better.' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Plan together.Travel lighter.' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Start planning' })).toBeInTheDocument()
   })
 
@@ -17,6 +17,6 @@ describe('Application', () => {
     render(<App />)
     expect(screen.getByRole('heading', { name: 'Page not found' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('link', { name: 'Return home' }))
-    expect(await screen.findByRole('heading', { name: 'Plan together.Travel better.' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Plan together.Travel lighter.' })).toBeInTheDocument()
   })
 })
