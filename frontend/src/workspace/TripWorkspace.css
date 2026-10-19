@@ -66,3 +66,21 @@
 .map-chip-row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .map-chip-button { border-color: var(--border); font: inherit; font-size: 13px; font-weight: 750; cursor: pointer; }
 .map-chip-button:hover { color: var(--primary-strong); border-color: var(--primary); }
+
+/* Expense summary: the signed-in member's position above the expense list. */
+.finance-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.summary-card { display: grid; gap: 4px; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.summary-card p { margin: 0; }
+.summary-headline { grid-column: 1 / -1; padding: 18px; }
+.summary-label { color: var(--ink-muted); font-size: 12px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.summary-amount { color: var(--ink); font-size: 30px; font-weight: 850; line-height: 1.1; overflow-wrap: anywhere; }
+.summary-amount-small { font-size: 18px; }
+.summary-headline.is-owing { border-color: var(--danger-line); background: var(--danger-soft); }
+.summary-headline.is-owing .summary-amount { color: var(--danger); }
+.summary-headline.is-owed { border-color: var(--sea-light); background: var(--sea-light); }
+.summary-headline.is-owed .summary-amount { color: var(--success); }
+.summary-headline.is-square .summary-amount { color: var(--success); }
+.summary-transfers { display: grid; grid-column: 1 / -1; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.summary-transfers li { display: flex; justify-content: space-between; gap: 10px; padding: 10px 14px; border-radius: 12px; background: var(--surface-secondary); font-weight: 700; }
+.summary-link { grid-column: 1 / -1; justify-self: start; }
+.finance-summary-empty { margin: 0; padding: 14px; border: 1px dashed var(--border-strong); border-radius: 14px; }

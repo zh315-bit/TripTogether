@@ -3,6 +3,7 @@ import type { KeyboardEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { BalancePanel } from '../components/BalancePanel'
 import { ExpensePanel } from '../components/ExpensePanel'
+import { FinanceSummary } from '../components/FinanceSummary'
 import { ItineraryPanel } from '../components/ItineraryPanel'
 import { MembersPanel } from '../components/MembersPanel'
 import { DayRoutePanel } from '../components/map/DayRoutePanel'
@@ -131,7 +132,10 @@ export default function TripWorkspace({ trip, owner, onTripUpdated, onTripDelete
               route={map.route} onShowDay={map.setDay}
               onSelectPlace={showPlace} onHoverPlace={map.hoverPlace} />
           </>}
-          {panel === 'expenses' && <ExpensePanel tripId={String(trip.id)} onChanged={() => setBalanceKey((key) => key + 1)} />}
+          {panel === 'expenses' && <>
+            <FinanceSummary tripId={String(trip.id)} refreshKey={balanceKey} onOpenBalances={() => choose('balances')} />
+            <ExpensePanel tripId={String(trip.id)} onChanged={() => setBalanceKey((key) => key + 1)} />
+          </>}
           {panel === 'balances' && <BalancePanel tripId={String(trip.id)} refreshKey={balanceKey} />}
           {panel === 'members' && <MembersPanel tripId={String(trip.id)} owner={owner} />}
           {panel === 'settings' && <TripSettings trip={trip} owner={owner}

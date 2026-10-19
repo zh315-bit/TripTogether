@@ -22,6 +22,7 @@ This is a deployed portfolio MVP. The application deliberately keeps the domain 
 - Select a place in the lists or on the map: both sides highlight it, and a floating card shows its details and the itinerary items it belongs to.
 - See the straight-line distance between consecutive stops right in the itinerary list, with the day's total beside its date.
 - The map frames the selected day's stops, with a one-click switch to show every place.
+- Open Expenses to see your own position first: what you owe or are owed, what you paid, your share, and your suggested transfers.
 
 ## Tech Stack
 
@@ -264,6 +265,14 @@ day's route fills the view. A chip in the top-right corner reads like
 button that zooms out to the whole pool (it becomes *Focus on this day*).
 Switching days refocuses the map; a day without located stops frames every
 place.
+
+The Expenses panel opens with a summary of the signed-in member's position: a
+headline card reading *You owe*, *You're owed* or *You're all square*, smaller
+cards for *You paid* and *Your share*, the suggested transfers that involve
+you ("Pay friend 17.75 USD"), and a link to everyone's balances. It reloads
+after every expense change. Like the rest of the app, it shows the server's
+exact amounts and does no money arithmetic in the browser, which is also why
+there is no trip-total card.
 
 Public pages use a travel palette (sky, sea, sand and sunset) over a softly
 "breathing" gradient backdrop: an 18-second drift of colour that stops when the
