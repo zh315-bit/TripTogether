@@ -25,6 +25,11 @@
   --danger: #b8434e;
   --danger-soft: #fff1f2;
   --danger-line: #f4c2c7;
+  /* Travel accents: sea, sky and sunset. */
+  --sea: #0f766e;
+  --sea-light: #d9f2ee;
+  --sky: #bfe3f7;
+  --sunset: #e4572e;
 }
 
 * {
@@ -45,4 +50,13 @@ a {
 
 button {
   cursor: pointer;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }

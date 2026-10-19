@@ -1,19 +1,19 @@
-import { BrowserRouter, Link, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Link, Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import { ProtectedRoute } from './auth/ProtectedRoute'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { AccountPage } from './pages/AccountPage'
 import { LogoutButton } from './components/LogoutButton'
-import { TripsPage } from './pages/TripsPage'
-import { TripDetailPage } from './pages/TripDetailPage'
+import { WorkspacePage } from './workspace/WorkspacePage'
 import tripTogetherLogo from './assets/triptogether-logo.png'
 import './App.css'
 
-function Shell() {
+/** Public and account pages: header, footer and the breathing travel backdrop. */
+function PublicLayout() {
   const { state } = useAuth()
   return (
-    <div className="app-shell">
+    <div className="app-shell breathing-bg">
       <header className="site-header">
         <Link className="brand" to="/">
           <span className="brand-logo" aria-hidden="true" style={{ backgroundImage: `url(${tripTogetherLogo})` }} />
@@ -21,7 +21,7 @@ function Shell() {
         </Link>
         <nav className="header-nav" aria-label="Main navigation">
           {state.status === 'authenticated' ? <>
-            <Link to="/trips">Trips</Link>
+            <Link to="/trips">Open map</Link>
             <Link to="/account">Account</Link>
             <span className="user-chip"><span>{state.user.username}</span><span>{state.user.email}</span></span>
             <LogoutButton className="nav-button" />
@@ -33,17 +33,7 @@ function Shell() {
       </header>
 
       <main className="page-content">
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route element={<ProtectedRoute />}>
-            <Route path="/trips" element={<TripsPage />} />
-            <Route path="/trips/:tripId" element={<TripDetailPage />} />
-            <Route path="/account" element={<AccountPage />} />
-          </Route>
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+        <Outlet />
       </main>
 
       <footer className="site-footer">
@@ -56,30 +46,36 @@ function Shell() {
 
 function HomePage() {
   const { state } = useAuth()
-  const authenticated = state.status === 'authenticated'
+  // Signed-in travellers land on their map, not the marketing page.
+  if (state.status === 'authenticated') return <Navigate to="/trips" replace />
   return <>
     <section className="landing" aria-labelledby="page-title">
       <div className="landing-copy-block">
-        <p className="eyebrow">Make every plan feel shared</p>
-        <h1 id="page-title">Plan together.<br /><em>Travel better.</em></h1>
-        <p className="landing-copy">Build the journey, keep every detail in sync, and split shared costs without a spreadsheet.</p>
+        <p className="eyebrow">Shared trip planning</p>
+        <h1 id="page-title">Plan together.<br /><em>Travel lighter.</em></h1>
+        <p className="landing-copy">Pin the places everyone wants to see on one shared map, shape each day into a route, and split costs without a spreadsheet.</p>
         <div className="actions landing-actions">
-        {authenticated ? <Link className="primary-button" to="/trips">Go to trips</Link> : <>
           <Link className="primary-button" to="/register">Start planning</Link>
           <Link className="retry-button" to="/login">Log in</Link>
-        </>}
         </div>
       </div>
-      <div className="landing-preview" aria-label="TripTogether product preview">
-        <div className="preview-top"><span className="preview-kicker">UPCOMING TRIP</span><span className="preview-dot" /></div>
-        <h2>Tokyo Adventure</h2><p>May 12 – May 18 · 4 travelers</p>
-        <div className="preview-days"><strong>Day 1</strong><span>09:00 · Tsukiji Market</span><span>13:00 · Asakusa</span><span>18:30 · Shibuya</span></div>
-        <div className="preview-finance"><span>Trip spending <strong>$1,248</strong></span><span>You are owed <strong>+$86</strong></span></div>
-      </div>
+      <figure className="landing-preview" aria-label="TripTogether product preview: a shared trip map with a three-stop day route">
+        <div className="preview-top"><span className="preview-kicker">Tokyo · 4 travelers</span><span className="preview-stamp">Day 1</span></div>
+        <svg className="preview-map" viewBox="0 0 320 170" role="img" aria-label="Map sketch with a dashed route between three member-coloured pins">
+          <path className="preview-sea" d="M0 120 C60 100 110 150 170 128 S270 92 320 112 V170 H0Z" />
+          <path className="preview-river" d="M40 0 C70 50 30 90 80 170" />
+          <path className="preview-route" d="M64 58 C110 30 150 44 178 76 S246 120 262 64" />
+          <g className="preview-pin" transform="translate(64 58)"><circle r="11" fill="#1c6fc2" /><text y="4">A</text></g>
+          <g className="preview-pin" transform="translate(178 76)"><circle r="11" fill="#d71f1f" /><text y="4">B</text></g>
+          <g className="preview-pin" transform="translate(262 64)"><circle r="11" fill="#127f36" /><text y="4">C</text></g>
+        </svg>
+        <div className="preview-days"><span><strong>1</strong> Tsukiji Market</span><span><strong>2</strong> Senso-ji</span><span><strong>3</strong> Shibuya at dusk</span></div>
+        <figcaption className="preview-finance"><span>Straight-line route <strong>11.6 km</strong></span><span>You are owed <strong>+$86</strong></span></figcaption>
+      </figure>
     </section>
     <section className="landing-values" aria-label="TripTogether features">
-      <div><span className="value-number">01</span><strong>Plan together</strong><p>One shared place for every destination, date, and decision.</p></div>
-      <div><span className="value-number">02</span><strong>Build the journey</strong><p>Organize each day with a clear itinerary your group can update.</p></div>
+      <div><span className="value-number">01</span><strong>One shared map</strong><p>Everyone pins their ideas, colour-coded by who suggested them.</p></div>
+      <div><span className="value-number">02</span><strong>Days that flow</strong><p>Turn places into a daily route and get a shorter order suggested.</p></div>
       <div><span className="value-number">03</span><strong>Split without the spreadsheet</strong><p>Track costs and understand what to settle at a glance.</p></div>
     </section>
   </>
@@ -101,7 +97,24 @@ function NotFoundPage() {
 function App() {
   return (
     <BrowserRouter>
-      <AuthProvider><Shell /></AuthProvider>
+      <AuthProvider>
+        <Routes>
+          <Route element={<PublicLayout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route element={<ProtectedRoute />}>
+              <Route path="/account" element={<AccountPage />} />
+            </Route>
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+          {/* The workspace fills the viewport: its own top bar, no site header or footer. */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/trips" element={<WorkspacePage />} />
+            <Route path="/trips/:tripId" element={<WorkspacePage />} />
+          </Route>
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   )
 }

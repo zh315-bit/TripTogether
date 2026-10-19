@@ -231,29 +231,42 @@ See [known limitations](docs/known-limitations.md) and the [Step 17 learning rev
 
 ## Frontend Experience
 
-The React client now uses a consistent, light-blue travel workspace: a compact application shell, a preview-led landing page, focused authentication cards, responsive trip cards, and a tabbed Trip Detail workspace. The four detail tabs separate the overview, shared itinerary, expenses and balances, and members without changing routes or API calls.
+After signing in, **the trip map is the home screen**. A slim top bar holds a
+trip switcher (a dropdown of every trip you own or joined), *New trip*, an
+invitations bell with a pending count, and the account menu. Every feature
+sits in a sidebar beside the full-height map: Places, Itinerary (day route and
+suggested order), Expenses, Balances, Members, and Trip details. The open panel
+is kept in the URL (`/trips/12?panel=itinerary`), and `/trips` reopens the last
+trip you viewed. On phones the sidebar becomes a bottom sheet over the map
+(peek, half or full height).
 
-The design keeps the existing functional states visible: loading and error messages use semantic status roles, empty dashboards point users to the relevant next action, invitations retain server-authorized actions, and financial values are rendered directly from backend responses. Buttons, fields, cards, tabs, and member rows share the same spacing, borders, focus treatment, and mobile breakpoints.
+Public pages use a travel palette (sky, sea, sand and sunset) over a softly
+"breathing" gradient backdrop: an 18-second drift of colour that stops when the
+system asks for reduced motion. The workspace, including Leaflet, is a lazily
+loaded chunk, so the landing and sign-in pages stay light.
+
+Accessibility carries over from earlier steps: tabbed panels with arrow-key,
+Home and End navigation, named and focusable map markers, member colours that
+always come with an initial and a name, semantic status and alert roles, and
+in-page confirmations instead of browser dialogs.
 
 ## Screenshots
 
-Real screenshots from the production application:
+Captured from a local build with demo data.
 
-### Landing Page
+### Landing page
 
-![TripTogether landing page](docs/screenshots/landing-page.png)
+![TripTogether landing page with breathing travel backdrop](docs/screenshots/landing-travel.jpg)
 
-### Trip Overview
+### Map workspace
 
-![TripTogether trip overview](docs/screenshots/trip-overview.png)
+![Signed-in map workspace with trip switcher, sidebar tools and member-coloured places](docs/screenshots/workspace-desktop.jpg)
 
-### Trip Members
+### On a phone
 
-![TripTogether trip members](docs/screenshots/trip-members.png)
-
-### Expenses & Balances
-
-![TripTogether expenses and balances](docs/screenshots/expenses-balances.png)
+| Map with the sheet collapsed | Itinerary panel in the bottom sheet |
+| --- | --- |
+| ![Phone: full-screen map with collapsed bottom sheet](docs/screenshots/workspace-mobile-peek.jpg) | ![Phone: itinerary panel raised over the map](docs/screenshots/workspace-mobile-sheet.jpg) |
 
 ## Future Improvements
 

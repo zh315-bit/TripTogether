@@ -3869,3 +3869,82 @@ dashboards, following the local-disk rule from the previous section.
 
 Pin the production Python version (Render default 3.14.3 vs CI 3.12 vs local
 3.9) and align CI with it.
+
+## 2026-10-19 — Map-First Web Redesign
+
+### What Was Implemented
+
+The signed-in home is now the trip map. A top bar has a trip switcher
+dropdown, *New trip*, an invitations bell with a pending count, and an
+account menu. All features moved into a tabbed sidebar beside a full-height
+map: Places, Itinerary (day route, optimize preview, itinerary list),
+Expenses, Balances, Members, and Trip details (edit and delete with an in-page
+confirmation). On phones the sidebar is a bottom sheet (peek, half, full).
+Public pages got a travel palette and a slowly breathing gradient backdrop.
+The old trip list and tabbed trip detail pages were removed; their features
+all live in the workspace.
+
+### Files to Review
+
+- `frontend/src/workspace/WorkspacePage.tsx`: routing to the last or first trip, top bar, popovers, empty state, lazy boundary
+- `frontend/src/workspace/TripWorkspace.tsx`: sidebar tabs (state in `?panel=`), panels, map overlays, bottom sheet
+- `frontend/src/components/map/useTripMap.ts`: shared map state extracted from the former `MapPanel`
+- `frontend/src/workspace/TripSettings.tsx`, `Icon.tsx`, `WorkspacePage.css`, `TripWorkspace.css`
+- `frontend/src/App.tsx`: public layout vs full-viewport workspace routes
+- `frontend/src/App.css`: `.breathing-bg` and the travel theme
+
+### Key Code to Understand
+
+- One `useTripMap(trip)` instance feeds both the sidebar and the map, so a
+  place added in the sidebar or a reordered itinerary redraws the map at once.
+  `itineraryVersion` makes the itinerary list reload after an applied route,
+  a coordination bug the restructure would otherwise have introduced.
+- `TripWorkspace` is keyed by trip id, so switching trips resets all
+  per-trip state instead of leaking it across trips.
+- The breathing backdrop is a fixed `::before` layer animating only
+  `transform` and `opacity` (cheap to composite), disabled under
+  `prefers-reduced-motion`.
+
+### Architecture Concept
+
+Lifting state to the nearest common owner of the views that share it; route
+state in the URL (`/trips/:id?panel=`) for linkable, refresh-safe UI;
+code-splitting by product area.
+
+### How to Test
+
+```bash
+cd frontend && npm run lint && npm run typecheck && npm test && npm run build
+```
+
+Manual: start the backend and `npm run dev`, sign in, and you land on your last
+or first trip's map. Switch trips from the dropdown, open each sidebar tab, try
+*New trip*, the bell and the account menu, then narrow the window below 768 px
+to see the bottom sheet. Results: **156 passed** (1 opt-in skipped). Main JS
+294.5 kB (gzip 91.9), down from 317.1 kB because the panels moved into the lazy
+workspace chunk (199.2 kB, gzip 57.0, including Leaflet). Screenshots are in
+`docs/screenshots/` (`landing-travel`, `workspace-desktop`,
+`workspace-mobile-peek`, `workspace-mobile-sheet`). Owner browser acceptance
+is pending.
+
+### Problems Encountered
+
+- After apply, the itinerary list under the route panel was stale (fixed with
+  `itineraryVersion`).
+- Tests leaked the remembered trip through `localStorage`. The global test
+  teardown now clears it.
+- Two auth tests relied on the old trip page rendering even when its request
+  failed. They now assert the signed-in top bar instead.
+- In the browser: row buttons were too wide for the sidebar, and switching
+  tabs kept the previous panel's scroll position. Both fixed.
+
+### What I Learned
+
+Moving UI around changes who owns state; every view that shows the same data
+needs one source of truth or an explicit refresh signal. Visual review catches
+layout problems that tests can't.
+
+### Next Step
+
+Owner browser acceptance of the redesign, then open a PR from
+`feature/map-workspace`. Pinning the production Python version is still pending.

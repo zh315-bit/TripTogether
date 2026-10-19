@@ -10,7 +10,15 @@ import type { ItineraryInput, ItineraryItem } from '../types/collaboration'
 import type { TripPlace } from '../types/places'
 import type { Trip } from '../types/trip'
 
-type Props = { trip: Trip }
+type Props = {
+  trip: Trip
+  /** The workspace's place pool; when given, the panel does not fetch its own copy. */
+  places?: TripPlace[]
+  /** Called after any successful itinerary change, so the map can redraw the route. */
+  onChanged?: () => void
+  /** Changes when the itinerary was changed outside this panel (e.g. an applied route). */
+  refreshKey?: number
+}
 
 const blank = (date: string): ItineraryInput => ({
   title: '', date, location: null, start_time: null, end_time: null, notes: null, place_id: null,
@@ -118,13 +126,14 @@ function ItemForm({
   </form>
 }
 
-export function ItineraryPanel({ trip }: Props) {
+export function ItineraryPanel({ trip, places: sharedPlaces, onChanged, refreshKey = 0 }: Props) {
   const { request } = useAuth()
   const [items, setItems] = useState<ItineraryItem[]>([])
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [message, setMessage] = useState('')
   const [editing, setEditing] = useState<ItineraryItem | null>(null)
-  const [places, setPlaces] = useState<TripPlace[]>([])
+  const [fetchedPlaces, setPlaces] = useState<TripPlace[]>([])
+  const places = sharedPlaces ?? fetchedPlaces
 
   const load = useCallback(async () => {
     setStatus('loading')
@@ -139,12 +148,13 @@ export function ItineraryPanel({ trip }: Props) {
 
   useEffect(() => {
     void load()
-  }, [load])
+  }, [load, refreshKey])
 
   useEffect(() => {
     // Optional: without places the form still works, just with "None" only.
+    if (sharedPlaces) return
     listPlaces(request, String(trip.id)).then(setPlaces, () => setPlaces([]))
-  }, [request, trip.id])
+  }, [request, trip.id, sharedPlaces])
 
   const placeNames = useMemo(() => new Map(places.map((place) => [place.id, place.name])), [places])
   // Stable initial values: ItemForm resets whenever `initial` changes identity, so
@@ -163,6 +173,7 @@ export function ItineraryPanel({ trip }: Props) {
     try {
       await deleteItineraryItem(request, String(trip.id), item.id)
       setItems((current) => current.filter((candidate) => candidate.id !== item.id))
+      onChanged?.()
     } catch (error) {
       setMessage(error instanceof ApiError ? error.message : 'Could not delete itinerary item.')
     }
@@ -178,6 +189,7 @@ export function ItineraryPanel({ trip }: Props) {
     setMessage('')
     try {
       const updated = await reorderItinerary(request, String(trip.id), date, ids, shown)
+      onChanged?.()
       setItems((current) => [...current.filter((item) => item.date !== date), ...updated]
         .sort((a, b) => a.date.localeCompare(b.date) || a.position - b.position))
     } catch (error) {
@@ -185,6 +197,7 @@ export function ItineraryPanel({ trip }: Props) {
         // Another member changed this day; show their version instead of retrying.
         setMessage('This day was changed by another member. The latest itinerary has been loaded.')
         await load()
+        onChanged?.()
         return
       }
       setMessage(error instanceof ApiError ? error.message : 'Could not reorder itinerary.')
@@ -227,6 +240,7 @@ export function ItineraryPanel({ trip }: Props) {
           onCancel={() => setEditing(null)}
           onSubmit={async (value) => {
             const updated = await updateItineraryItem(request, String(trip.id), editing.id, value)
+            onChanged?.()
             setItems((current) => current.map((item) => item.id === updated.id ? updated : item)
               .sort((a, b) => a.date.localeCompare(b.date) || a.position - b.position))
             setEditing(null)
@@ -241,6 +255,7 @@ export function ItineraryPanel({ trip }: Props) {
           onSubmit={async (value) => {
             const created = await createItineraryItem(request, String(trip.id), value)
             setItems((current) => [...current, created].sort((a, b) => a.date.localeCompare(b.date) || a.position - b.position))
+            onChanged?.()
           }}
         />
       </section>}
