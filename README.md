@@ -19,6 +19,7 @@ This is a deployed portfolio MVP. The application deliberately keeps the domain 
 - View server-derived balances and suggested settlement transfers.
 - Use responsive pages with loading, empty, error, confirmation, and success feedback.
 - Plan on a shared map: search or pin candidate places (colour-coded per member), link them to itinerary items, view each day's straight-line route, and apply a suggested shorter visiting order with conflict detection.
+- Select a place in the lists or on the map: both sides highlight it, and a floating card shows its details and the itinerary items it belongs to.
 
 ## Tech Stack
 
@@ -223,7 +224,7 @@ The verification scripts create random disposable users and clean them up. They 
 
 ## Known Limitations
 
-- No OAuth, refresh tokens, payments, maps, booking, chat, or live updates.
+- No OAuth, refresh tokens, payments, booking, chat, or live updates.
 - Logout clears the local token; server-side revocation is not implemented.
 - Backend authorization remains the source of truth; hidden browser controls are UX only.
 
@@ -239,6 +240,15 @@ suggested order), Expenses, Balances, Members, and Trip details. The open panel
 is kept in the URL (`/trips/12?panel=itinerary`), and `/trips` reopens the last
 trip you viewed. On phones the sidebar becomes a bottom sheet over the map
 (peek, half or full height).
+
+The lists and the map share one selection. Clicking a place in the place pool,
+or the linked place of an itinerary item, pans the map to it and rings its
+marker together with its stop on the day route. Clicking a marker highlights
+its row in the place pool and scrolls it into view, and hovering either side
+highlights the other. A floating card on the map shows the selected place's
+address, note, coordinates and linked itinerary items, with a shortcut back to
+the place list; Esc, the close button or a click on empty map closes it. On
+phones, selecting a place lowers the sheet so the card and marker stay visible.
 
 Public pages use a travel palette (sky, sea, sand and sunset) over a softly
 "breathing" gradient backdrop: an 18-second drift of colour that stops when the
@@ -261,6 +271,10 @@ Captured from a local build with demo data.
 ### Map workspace
 
 ![Signed-in map workspace with trip switcher, sidebar tools and member-coloured places](docs/screenshots/workspace-desktop.jpg)
+
+### Place details on the map
+
+![A place selected in the place pool, ringed on the map, with its floating detail card](docs/screenshots/workspace-place-detail.jpg)
 
 ### On a phone
 
