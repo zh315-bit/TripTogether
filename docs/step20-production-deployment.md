@@ -1,6 +1,7 @@
 # Step 20A — Production Deployment Runbook
 
-TripTogether is deployed on Vercel, Render Web Service, and Render PostgreSQL.
+TripTogether is deployed on Vercel, a Render Web Service, and Neon PostgreSQL
+(migrated from Render PostgreSQL on 2026-10-18).
 Use this runbook for controlled releases and new database setup. The project
 owner confirmed production registration and Alembic `0005 (head)` after the
 September 2026 missing-table incident. The collaborative-map release adds
@@ -10,18 +11,20 @@ migrations 0006 and 0007 and expects `0007 (head)`; release it with
 ## Production architecture
 
 ```text
-Browser → Vercel React SPA → HTTPS → Render FastAPI → Render PostgreSQL
+Browser → Vercel React SPA → HTTPS → Render FastAPI → Neon PostgreSQL
 ```
 
 The Vercel build contains the public API origin only. Render owns all backend
 runtime configuration and secrets. PostgreSQL remains the source of truth for
 trips, memberships, itineraries, expenses, balances, and settlements.
 
-## Render PostgreSQL and backend
+## Neon PostgreSQL and Render backend
 
-1. In Render, create a PostgreSQL database (**version 15 or newer**;
-   migration 0006 refuses older servers) and a Python Web Service in the same
-   region. Do not add test users or seed data.
+1. In Neon, create a project and database (**PostgreSQL 15 or newer**;
+   migration 0006 refuses older servers) in a region near the Render service.
+   Production: project `triptogether` (`green-wind-10836666`), `aws-us-east-2`,
+   PostgreSQL 18.6, database `triptogether`, role `triptogether_app`. In Render,
+   create a Python Web Service. Do not add test users or seed data.
 2. For the Web Service, select the GitHub repository and set **Root Directory**
    to `backend`.
 3. Set **Build Command** to `pip install -r requirements.txt`.
@@ -37,7 +40,7 @@ trips, memberships, itineraries, expenses, balances, and settlements.
 
    | Name | Value | Secret |
    | --- | --- | --- |
-   | `DATABASE_URL` | Render PostgreSQL internal URL | Yes |
+   | `DATABASE_URL` | Neon **direct** connection string (not the `-pooler` host), with its query parameters | Yes |
    | `JWT_SECRET_KEY` | unique, securely generated random value | Yes |
    | `JWT_ALGORITHM` | `HS256` | No |
    | `ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | No |
@@ -66,6 +69,22 @@ trips, memberships, itineraries, expenses, balances, and settlements.
 The backend accepts provider-standard `postgres://` and `postgresql://` URLs,
 normalizing them internally to the existing `postgresql+psycopg` SQLAlchemy
 driver. Local development URLs are unchanged.
+
+**Why the direct connection:** the backend runs one Render instance with its
+own SQLAlchemy pool, and Alembic migrations and `pg_dump`/`pg_restore` need a
+full session. Neon's pooler (transaction-mode PgBouncer) adds nothing here and
+is a poor fit for those tools. Use the same direct string for the app,
+migrations and dumps.
+
+Neon Free plan limits that matter here (review Neon's live pricing page before
+relying on them):
+
+- **1 GB** storage for the branch;
+- **100 CU-hours per month** of compute;
+- the compute **suspends after 5 minutes idle**, so the first query after a
+  pause takes a moment to wake it (on top of Render Free's own cold start);
+- **point-in-time restore covers only the last 6 hours**, so it is not a backup
+  strategy. Keep your own `pg_dump` files (see below).
 
 ## Controlled migration
 
@@ -125,9 +144,21 @@ Render Free has no Pre-Deploy Command, and Render and Vercel auto-deploy
 follow this order exactly:
 
 1. **Check the PostgreSQL version.** Run `SHOW server_version;` against
-   production and confirm it is at least 15. Stop here if it is not.
-2. **Back up the database** from a trusted machine (for example `pg_dump`).
-   Render Free PostgreSQL has no backups of its own.
+   production (Neon) and confirm it is at least 15. Stop here if it is not.
+2. **Back up the database: done by the owner, on their own machine, in their
+   own terminal.** Before every release with a schema change:
+
+   ```bash
+   mkdir -p ~/Backups/TripTogether
+   pg_dump -Fc -f ~/Backups/TripTogether/triptogether-<revision>-<YYYYMMDD>.dump "<direct DATABASE_URL>"
+   pg_restore -l ~/Backups/TripTogether/triptogether-<revision>-<YYYYMMDD>.dump | head
+   ```
+
+   Use a `pg_dump` whose major version is at least the server's (currently 18),
+   confirm the file in Finder, and keep the URL out of shell history.
+   Neon's 6-hour point-in-time restore is not a substitute. Agents may prepare
+   these commands but do not run them: local files and production credentials
+   stay with the owner (see RECORD.md, 2026-10-18).
 3. **Switch the Render health check to `/health`** (Web Service → Settings →
    Health Check Path) for the duration of the release.
 4. **Migrate manually with the new code.** From a trusted checkout of the
@@ -174,7 +205,7 @@ follow this order exactly:
    `python -m alembic downgrade 0005`. This drops `trip_places` and
    `geocoder_throttle` and the `place_id` column. Itinerary rows and their
    `location` text survive, but **all saved places and links are lost**, so
-   restore from the backup if they matter.
+   restore them from the owner's `~/Backups/TripTogether` dump if they matter.
 3. Once the revision matches the deployed code, set the health check back to
    `/ready`.
 

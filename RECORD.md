@@ -3791,10 +3791,14 @@ verify results, but does not create, move or delete those files.
 
 ### Pending
 
-1. **Database expiry:** Render free Postgres `triptogether-db` expires
-   **2026-10-22**. Migrate this week; replace all credentials (see Incidents);
-   restore from the owner's backup; then delete `smoke_test_20261018`.
-2. **Pin the production Python version.** Render builds with its default
+1. **Database expiry: resolved (2026-10-18).** Migrated to Neon; see the
+   next section.
+   - **Credential replacement: resolved.** Neon uses entirely new credentials.
+     The old Render database (and the partially exposed password) will be
+     deleted when it expires on 2026-10-22.
+   - **Test account: deleted.** `smoke_test_20261018` was removed from Neon
+     after the restore.
+2. **Pin the production Python version (still pending).** Render builds with its default
    Python 3.14.3, while CI tests 3.12 and local development uses 3.9. Add a
    pinned version (for example `.python-version`) and align CI with it.
 3. **Investigate the lost Desktop file** (what changed `~/Desktop` on
@@ -3808,3 +3812,60 @@ path was not what the docs assumed). Redaction that relies on parsing input
 fails exactly when the input is malformed, so validate first and print
 nothing raw. A backup only counts once its owner has confirmed it in a
 location they control.
+
+
+## 2026-10-18 — Production Database Migration: Render PostgreSQL → Neon
+
+### What Changed
+
+Production PostgreSQL moved from Render free Postgres (`triptogether-db`,
+expiring 2026-10-22) to **Neon**: project `triptogether`
+(`green-wind-10836666`), `aws-us-east-2`, PostgreSQL 18.6, database
+`triptogether`, role `triptogether_app`, using the **direct** (non-pooler)
+connection string. The owner did every step in their own terminal and
+dashboards, following the local-disk rule from the previous section.
+
+### Steps (owner)
+
+1. Backup with `pg_dump` 18 on the owner's machine:
+   `~/Backups/TripTogether/triptogether-0007-20261018.dump` (revision 0007).
+2. Restore into Neon:
+   `pg_restore --no-owner --no-privileges --single-transaction`.
+   Ownership and grants were left to the Neon role, and the restore was all or
+   nothing.
+3. Verified on Neon: revision `0007`, row counts, constraints, indexes and
+   identity/sequence counters (so new IDs do not collide with restored rows).
+4. Deleted `smoke_test_20261018` from Neon.
+5. Changed `DATABASE_URL` on Render to Neon's direct string. Render deployed
+   `dep-dbanf8gm7kps739hvev0` (commit `6c26b58`, manual trigger), which passed the
+   `/ready` health check and went live at 2026-10-19 01:52:27 UTC.
+
+### Independent Verification (agent, read-only)
+
+- Neon: `alembic_version` = `0007`, server 18.6. Row counts match the
+  pre-migration baseline: users 3, trips 2, trip_members 3,
+  trip_invitations 1, itinerary_items 1, expenses 2, expense_splits 2.
+  `trip_places` 0, `geocoder_throttle` 1, `smoke_test_20261018` absent.
+- `/ready` 200 does **not** prove the app is on Neon, because the old Render
+  database is also at 0007. Confirmed instead through Neon's
+  `pg_stat_activity`: after a `/ready` request there was an idle
+  `triptogether_app` session whose last statement was `ROLLBACK` (the
+  readiness check's session cleanup).
+- Neon project settings: 1 GB branch size limit, 6-hour history retention,
+  `free_v3` plan.
+
+### Operating Notes
+
+- Neon Free limits: 1 GB storage, 100 CU-hours/month, compute suspends after
+  5 minutes idle, point-in-time restore limited to 6 hours. The 6-hour restore
+  is not a backup, so the owner's local `pg_dump` before every schema release
+  remains mandatory (documented in `docs/step20-production-deployment.md` and
+  `docs/deployment-checklist.md`).
+- Cold starts can now stack: Render Free wake-up plus Neon compute resume.
+- The old Render database is untouched and will be deleted by Render on
+  2026-10-22 together with its exposed credentials. Nothing points to it.
+
+### Next Step
+
+Pin the production Python version (Render default 3.14.3 vs CI 3.12 vs local
+3.9) and align CI with it.

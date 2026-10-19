@@ -8,7 +8,7 @@ credential, account, or deployment command that creates cloud resources.
 | Variable | Vercel frontend | Render backend | Secret | Example |
 | --- | --- | --- | --- | --- |
 | `VITE_API_BASE_URL` | Yes, build-time | No | No | `https://<render-service>.onrender.com` |
-| `DATABASE_URL` | No | Yes | Yes | Render internal PostgreSQL URL |
+| `DATABASE_URL` | No | Yes | Yes | Neon **direct** (non-pooler) connection string |
 | `JWT_SECRET_KEY` | No | Yes | Yes | generated secure random value |
 | `JWT_ALGORITHM` | No | Yes | No | `HS256` |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | No | Yes | No | `30` |
@@ -46,8 +46,11 @@ What the defaults mean:
    secret, `node_modules`, `dist`, cache, or AppleDouble metadata is staged.
 2. Push the reviewed repository to GitHub yourself. Do not include local `.env`
    files.
-3. In Render, create a PostgreSQL instance and a Python Web Service in the same
-   region. Prefer the database's internal connection URL for the backend.
+3. Create the database in Neon (PostgreSQL 15+, region close to the Render
+   service: production uses `aws-us-east-2` with Render in Ohio), with a
+   dedicated application role. In Render, create a Python Web Service. Use
+   Neon's **direct** connection string, not the `-pooler` host (see "PostgreSQL
+   choice").
 4. Configure the Render Web Service: root directory `backend`, runtime `Python
    3`, build command `pip install -r requirements.txt`, and start command
    `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
@@ -94,14 +97,26 @@ What the defaults mean:
 checks the server version and stops before running any DDL. Check it with
 `SHOW server_version;`.
 
-For a persistent portfolio demo, use a paid Render PostgreSQL plan in the same
-region as the Render backend. Render's free PostgreSQL database expires after
-30 days, has a 1 GB limit, and has no backups, so it is unsuitable for a stable
-public demo. For a no-cost prototype, Neon Postgres is a simple alternative;
-its free plan is aimed at prototypes/side projects and has current resource
-allowances, so review its live limits before relying on it. A Neon external URL
-also works because the backend normalizes standard `postgres://` and
-`postgresql://` URLs to the existing psycopg driver.
+Production uses **Neon** (project `triptogether`, `aws-us-east-2`, PostgreSQL
+18.6, database `triptogether`, role `triptogether_app`). It was migrated from
+Render PostgreSQL on 2026-10-18; see RECORD.md.
+
+Use Neon's **direct** connection string (host without `-pooler`) for the
+backend, for Alembic migrations and for `pg_dump`/`pg_restore`. The backend
+keeps its own SQLAlchemy pool on a single Render instance, and migrations and
+dumps need a real session rather than a transaction-pooled one. Keep the
+query parameters Neon provides (`sslmode=require` and friends). The backend
+normalizes `postgres://`/`postgresql://` to its psycopg driver.
+
+Neon Free plan limits that matter here (review Neon's live pricing page before
+relying on them):
+
+- **1 GB** storage for the branch;
+- **100 CU-hours per month** of compute;
+- the compute **suspends after 5 minutes idle**, so the first query after a
+  pause takes a moment to wake it (on top of Render Free's own cold start);
+- **point-in-time restore covers only the last 6 hours**, so it is not a backup
+  strategy. Keep your own `pg_dump` files (see below).
 
 ## Releasing a schema change (Render Free + auto-deploy)
 
@@ -109,9 +124,12 @@ Use this order for a release that includes migrations, such as 0006/0007 for
 the collaborative map, when Render auto-deploys `main` and there is no
 Pre-Deploy Command:
 
-1. Confirm the Render PostgreSQL version is at least 15 (`SHOW server_version;`).
-2. Back up the database (for example with `pg_dump` from a trusted machine).
-   Render Free PostgreSQL has no automatic backups.
+1. Confirm the Neon PostgreSQL version is at least 15 (`SHOW server_version;`).
+2. **The owner backs up the database on their own machine, in their own
+   terminal**, before every release with a schema change:
+   `pg_dump -Fc` (client major version ≥ server, currently 18) to
+   `~/Backups/TripTogether/`, then check it with `pg_restore -l` and in Finder.
+   Neon's 6-hour point-in-time restore does not replace this.
 3. In Render, temporarily change the Web Service health check path from
    `/ready` to `/health`.
 4. From a trusted environment with the production `DATABASE_URL`, run
