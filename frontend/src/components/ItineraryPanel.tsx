@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ApiError } from '../api/client'
 import {
@@ -7,8 +7,19 @@ import {
 import { listPlaces } from '../api/places'
 import { useAuth } from '../auth/AuthContext'
 import type { ItineraryInput, ItineraryItem } from '../types/collaboration'
-import type { TripPlace } from '../types/places'
+import type { DayRoute, RouteLeg, TripPlace } from '../types/places'
+import { km } from './map/distance'
 import type { Trip } from '../types/trip'
+
+/** The straight-line hop into an item; names the origin when an unlocated item sits between. */
+function LegDistance({ leg, previous, items }: { leg?: RouteLeg; previous?: ItineraryItem; items: ItineraryItem[] }) {
+  // A stale route (mid-reload after an edit) may point at items no longer on this day.
+  const from = leg && items.find((item) => item.id === leg.from_item_id)
+  if (!leg || !from) return null
+  return <p className="itinerary-leg" title="Straight-line distance, not travel distance">
+    <span aria-hidden="true">↓ </span>{km(leg.distance_km)}{from.id === previous?.id ? '' : ` from ${from.title}`}
+  </p>
+}
 
 type Props = {
   trip: Trip
@@ -22,6 +33,10 @@ type Props = {
   selectedPlaceId?: number | null
   onSelectPlace?: (placeId: number) => void
   onHoverPlace?: (placeId: number | null) => void
+  /** The map's selected day route: its legs are shown between that day's rows. */
+  route?: DayRoute | null
+  /** Makes another day the map's route day, so its distances appear here. */
+  onShowDay?: (date: string) => void
 }
 
 const blank = (date: string): ItineraryInput => ({
@@ -132,6 +147,7 @@ function ItemForm({
 
 export function ItineraryPanel({
   trip, places: sharedPlaces, onChanged, refreshKey = 0, selectedPlaceId = null, onSelectPlace, onHoverPlace,
+  route = null, onShowDay,
 }: Props) {
   const { request } = useAuth()
   const [items, setItems] = useState<ItineraryItem[]>([])
@@ -173,6 +189,10 @@ export function ItineraryPanel({
     for (const item of items) groups.set(item.date, [...(groups.get(item.date) ?? []), item])
     return [...groups.entries()]
   }, [items])
+
+  // Legs join consecutive *located* items, so one may skip an item without a place.
+  const legsTo = useMemo(() => new Map<number, RouteLeg>(
+    (route?.legs ?? []).map((leg) => [leg.to_item_id, leg])), [route])
 
   async function remove(item: ItineraryItem) {
     if (!window.confirm(`Delete ${item.title}?`)) return
@@ -220,28 +240,38 @@ export function ItineraryPanel({
       {status === 'error' && <p className="form-error" role="alert">{message}</p>}
       {status === 'ready' && grouped.length === 0 && <p className="muted-copy">No itinerary items yet.</p>}
       {grouped.map(([date, dayItems]) => <section className="itinerary-day" key={date}>
-        <h3>{date}</h3>
+        <div className="itinerary-day-heading">
+          <h3>{date}</h3>
+          {route?.date === date
+            ? route.legs.length > 0 && <span className="trip-meta">{km(route.total_distance_km)} straight-line</span>
+            : onShowDay && <button className="place-link-button" type="button" onClick={() => onShowDay(date)}
+              aria-label={`Show the route and distances for ${date}`}>Show distances</button>}
+        </div>
         <div className="itinerary-list">
-          {dayItems.map((item, index) => <article key={item.id}
-            className={`itinerary-row${item.place_id !== null && item.place_id === selectedPlaceId ? ' is-selected' : ''}`}
-            onMouseEnter={item.place_id === null ? undefined : () => onHoverPlace?.(item.place_id)}
-            onMouseLeave={item.place_id === null ? undefined : () => onHoverPlace?.(null)}>
-            <div><strong>{item.title}</strong>
-              <span className="trip-meta">{[item.start_time?.slice(0, 5), item.location].filter(Boolean).join(' · ') || 'No time or location'}</span>
-              {item.place_id !== null && (onSelectPlace
-                ? <button className="place-link-button" type="button" onClick={() => onSelectPlace(item.place_id!)}
-                  aria-label={`Show ${placeNames.get(item.place_id) ?? 'linked place'} on the map`}>
-                  Place: {placeNames.get(item.place_id) ?? 'linked place'}</button>
-                : <span className="trip-meta">Place: {placeNames.get(item.place_id) ?? 'linked place'}</span>)}
-              {item.notes && <p className="muted-copy">{item.notes}</p>}
-            </div>
-            <div className="actions">
-              <button className="icon-button" type="button" title="Move item up" aria-label={`Move ${item.title} up`} disabled={index === 0} onClick={() => void move(date, index, -1)}>↑</button>
-              <button className="icon-button" type="button" title="Move item down" aria-label={`Move ${item.title} down`} disabled={index === dayItems.length - 1} onClick={() => void move(date, index, 1)}>↓</button>
-              <button className="retry-button" type="button" onClick={() => setEditing(item)}>Edit</button>
-              <button className="danger-button" type="button" onClick={() => void remove(item)}>Delete</button>
-            </div>
-          </article>)}
+          {dayItems.map((item, index) => <Fragment key={item.id}>
+            {route?.date === date && <LegDistance leg={legsTo.get(item.id)} previous={dayItems[index - 1]}
+              items={dayItems} />}
+            <article
+              className={`itinerary-row${item.place_id !== null && item.place_id === selectedPlaceId ? ' is-selected' : ''}`}
+              onMouseEnter={item.place_id === null ? undefined : () => onHoverPlace?.(item.place_id)}
+              onMouseLeave={item.place_id === null ? undefined : () => onHoverPlace?.(null)}>
+              <div><strong>{item.title}</strong>
+                <span className="trip-meta">{[item.start_time?.slice(0, 5), item.location].filter(Boolean).join(' · ') || 'No time or location'}</span>
+                {item.place_id !== null && (onSelectPlace
+                  ? <button className="place-link-button" type="button" onClick={() => onSelectPlace(item.place_id!)}
+                    aria-label={`Show ${placeNames.get(item.place_id) ?? 'linked place'} on the map`}>
+                    Place: {placeNames.get(item.place_id) ?? 'linked place'}</button>
+                  : <span className="trip-meta">Place: {placeNames.get(item.place_id) ?? 'linked place'}</span>)}
+                {item.notes && <p className="muted-copy">{item.notes}</p>}
+              </div>
+              <div className="actions">
+                <button className="icon-button" type="button" title="Move item up" aria-label={`Move ${item.title} up`} disabled={index === 0} onClick={() => void move(date, index, -1)}>↑</button>
+                <button className="icon-button" type="button" title="Move item down" aria-label={`Move ${item.title} down`} disabled={index === dayItems.length - 1} onClick={() => void move(date, index, 1)}>↓</button>
+                <button className="retry-button" type="button" onClick={() => setEditing(item)}>Edit</button>
+                <button className="danger-button" type="button" onClick={() => void remove(item)}>Delete</button>
+              </div>
+            </article>
+          </Fragment>)}
         </div>
       </section>)}
       {editing ? <section className="trip-editor" aria-labelledby="edit-itinerary-title">

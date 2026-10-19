@@ -56,3 +56,10 @@
 @media (max-width: 768px) and (prefers-reduced-motion: reduce) {
   .workspace-sidebar { transition: none; }
 }
+
+/* Straight-line hops between the route day's rows. */
+.itinerary-day-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.itinerary-day-heading h3 { margin: 0; }
+.itinerary-leg { margin: 0; padding: 2px 0 2px 16px; border-top: 1px solid var(--border); color: var(--ink-muted); font-size: 12px; font-weight: 700; }
+.itinerary-leg + .itinerary-row { padding-top: 6px; }
+.itinerary-leg + .itinerary-row::before { top: 17px; }

@@ -1,5 +1,6 @@
 import type { ItineraryItem } from '../../types/collaboration'
 import type { DayRoute, OptimizePlan } from '../../types/places'
+import { km } from './distance'
 
 type Props = {
   days: string[]
@@ -16,8 +17,6 @@ type Props = {
   onApply: () => void
   onCancel: () => void
 }
-
-const km = (value: number) => `${value.toFixed(value < 10 ? 2 : 1)} km`
 
 function title(itemsById: Map<number, ItineraryItem>, id: number): string {
   return itemsById.get(id)?.title ?? `Item #${id}`

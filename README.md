@@ -20,6 +20,7 @@ This is a deployed portfolio MVP. The application deliberately keeps the domain 
 - Use responsive pages with loading, empty, error, confirmation, and success feedback.
 - Plan on a shared map: search or pin candidate places (colour-coded per member), link them to itinerary items, view each day's straight-line route, and apply a suggested shorter visiting order with conflict detection.
 - Select a place in the lists or on the map: both sides highlight it, and a floating card shows its details and the itinerary items it belongs to.
+- See the straight-line distance between consecutive stops right in the itinerary list, with the day's total beside its date.
 
 ## Tech Stack
 
@@ -249,6 +250,12 @@ highlights the other. A floating card on the map shows the selected place's
 address, note, coordinates and linked itinerary items, with a shortcut back to
 the place list; Esc, the close button or a click on empty map closes it. On
 phones, selecting a place lowers the sheet so the card and marker stay visible.
+
+The itinerary list also shows the map's route day: between consecutive stops it
+shows the straight-line hop (for example "↓ 1.82 km"), naming the starting stop
+when an item without a place sits in between, and the day's total sits beside
+its date. Any other day has a *Show distances* link that makes it the route day
+on the map and in the list.
 
 Public pages use a travel palette (sky, sea, sand and sunset) over a softly
 "breathing" gradient backdrop: an 18-second drift of colour that stops when the

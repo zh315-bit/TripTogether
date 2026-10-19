@@ -306,6 +306,22 @@ describe('map workspace', () => {
       ([url]) => new URL(String(url)).searchParams.get('date'))).toContain('2027-06-11'))
   })
 
+  it('shows each hop between the route day\'s itinerary rows and switches days from the list', async () => {
+    const { fetcher, state } = server()
+    state.items.push({ ...item(20, 'Museum', 1, 2), date: '2027-06-11' })
+    await openMap(fetcher, 'Itinerary')
+    const itinerary = screen.getByRole('region', { name: 'Itinerary' })
+    await within(itinerary).findByText('14.3 km straight-line')
+    // Lunch has no place, so the first hop into Tower visit names where it starts.
+    expect([...itinerary.querySelectorAll('.itinerary-leg')].map((leg) => leg.textContent)).toEqual([
+      '↓ 1.82 km from Temple', '↓ 12.5 km',
+    ])
+    await userEvent.click(within(itinerary).getByRole('button', { name: 'Show the route and distances for 2027-06-11' }))
+    expect(screen.getByLabelText('Day')).toHaveValue('2027-06-11')
+    await waitFor(() => expect(calls(fetcher, '/api/v1/trips/12/itinerary/route').map(
+      ([url]) => new URL(String(url)).searchParams.get('date'))).toContain('2027-06-11'))
+  })
+
   it('previews a suggested order and applies it with the expected order', async () => {
     const { fetcher } = server((url) => {
       if (url.pathname.endsWith('/optimize')) return json(plan)

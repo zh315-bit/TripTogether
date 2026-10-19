@@ -7,6 +7,7 @@ import { ItineraryPanel } from '../components/ItineraryPanel'
 import { MembersPanel } from '../components/MembersPanel'
 import { DayRoutePanel } from '../components/map/DayRoutePanel'
 import { tripDays } from '../components/map/days'
+import { km } from '../components/map/distance'
 import { LeafletMap } from '../components/map/LeafletMap'
 import { PlaceDetailCard } from '../components/map/PlaceDetailCard'
 import { PlacePool } from '../components/map/PlacePool'
@@ -32,7 +33,6 @@ type PanelId = (typeof PANELS)[number]['id']
 type Sheet = 'peek' | 'half' | 'full'
 
 const isPanel = (value: string | null): value is PanelId => PANELS.some((panel) => panel.id === value)
-const km = (value: number) => `${value.toFixed(value < 10 ? 2 : 1)} km`
 
 type Props = {
   trip: Trip
@@ -121,6 +121,7 @@ export default function TripWorkspace({ trip, owner, onTripUpdated, onTripDelete
               onSuggest={() => void map.suggest()} onApply={() => void map.apply()} onCancel={map.cancelPlan} />
             <ItineraryPanel trip={trip} places={map.places} refreshKey={map.itineraryVersion}
               onChanged={() => void map.refreshItinerary()} selectedPlaceId={map.selectedPlace?.id ?? null}
+              route={map.route} onShowDay={map.setDay}
               onSelectPlace={showPlace} onHoverPlace={map.hoverPlace} />
           </>}
           {panel === 'expenses' && <ExpensePanel tripId={String(trip.id)} onChanged={() => setBalanceKey((key) => key + 1)} />}
