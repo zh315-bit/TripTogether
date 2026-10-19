@@ -11,11 +11,15 @@ from app.api.auth import router as auth_router
 from app.api.errors import APIErrorResponse, http_error_handler, validation_error_handler
 from app.api.trips import router as trips_router
 from app.api.invitations import router as invitations_router
-from app.api.itinerary import router as itinerary_router
+from app.api.itinerary import route_router as itinerary_route_router, router as itinerary_router
 from app.api.expenses import router as expenses_router
 from app.api.balances import router as balances_router
+from app.api.trip_places import router as trip_places_router
+from app.api.geocode import router as geocode_router
 from app.api.system import router as system_router
-from app.core.config import get_app_settings, get_database_url, get_jwt_settings
+from app.core.config import (
+    get_app_settings, get_database_url, get_geocoder_settings, get_jwt_settings,
+)
 from app.core.logging import SafeErrorMiddleware, configure_logging
 
 
@@ -29,6 +33,7 @@ async def lifespan(application: FastAPI):
         try:
             get_database_url()
             get_jwt_settings()
+            get_geocoder_settings("production")
         except ValueError:
             logger.error("Production configuration invalid")
             raise RuntimeError("Production configuration invalid") from None
@@ -53,6 +58,8 @@ def create_app() -> FastAPI:
                 ("itinerary", "Shared items and complete daily ordering"),
                 ("expenses", "Single-currency expenses with exact stored splits"),
                 ("balances", "Read-only balances and suggested settlements"),
+                ("places", "Shared candidate places; coordinates fixed after creation"),
+                ("geocoding", "Explicit place search through a rate-limited server proxy"),
                 ("system", "Liveness and readiness"),
             )
         ],
@@ -61,10 +68,15 @@ def create_app() -> FastAPI:
     application.add_exception_handler(RequestValidationError, validation_error_handler)
     application.add_exception_handler(StarletteHTTPException, http_error_handler)
     versioned = APIRouter(prefix="/api/v1")
+    # Must precede itinerary_router: see route_router in app/api/itinerary.py.
+    versioned.include_router(itinerary_route_router)
     for router in (auth_router, trips_router, invitations_router, itinerary_router,
                    expenses_router, balances_router):
         application.include_router(router, include_in_schema=False)
         versioned.include_router(router)
+    # New resources are versioned only; they have no legacy alias.
+    versioned.include_router(trip_places_router)
+    versioned.include_router(geocode_router)
     # Existing routers describe legacy errors; v1 documents the new envelope.
     for route in versioned.routes:
         if isinstance(route, APIRoute) and route.path.startswith("/api/v1/"):
@@ -79,6 +91,9 @@ def create_app() -> FastAPI:
         CORSMiddleware, allow_origins=list(settings.cors_origins), allow_credentials=False,
         allow_methods=["GET", "POST", "PATCH", "DELETE"],
         allow_headers=["Authorization", "Content-Type"], max_age=600,
+        # Not CORS-safelisted: without this a cross-origin client cannot read the
+        # GEOCODER_BUSY retry delay.
+        expose_headers=["Retry-After"],
     )
     return application
 

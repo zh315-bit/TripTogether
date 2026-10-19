@@ -8,19 +8,29 @@ export class ApiError extends Error {
   readonly status: number
   readonly code: string
   readonly details: ApiValidationIssue[]
+  /** Seconds from a Retry-After header (429/503), when the server sent one. */
+  readonly retryAfter: number | null
 
   constructor(
     status: number,
     code: string,
     message: string,
     details: ApiValidationIssue[] = [],
+    retryAfter: number | null = null,
   ) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
     this.details = details
+    this.retryAfter = retryAfter
   }
+}
+
+function parseRetryAfter(value: string | null): number | null {
+  // Only the delay-seconds form; the backend never sends an HTTP date.
+  if (!value || !/^[0-9]{1,4}$/.test(value.trim())) return null
+  return Number(value.trim())
 }
 
 function getBaseUrl(): string {
@@ -95,6 +105,7 @@ export async function apiFetch<T>(
       if (isApiErrorPayload(body)) {
         throw new ApiError(
           response.status, body.error.code, body.error.message, body.error.details,
+          parseRetryAfter(response.headers.get('Retry-After')),
         )
       }
       throw new ApiError(

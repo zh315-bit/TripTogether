@@ -101,3 +101,38 @@ def get_app_settings() -> AppSettings:
         raise ValueError("CORS_ORIGINS must be a JSON array of explicit HTTP(S) origins; "
                          "production requires HTTPS.") from None
     return AppSettings(environment=environment, cors_origins=tuple(dict.fromkeys(origins)))
+
+
+GEOCODER_PROVIDERS = ("disabled", "fake", "nominatim")
+NOMINATIM_PUBLIC_URL = "https://nominatim.openstreetmap.org"
+
+
+@dataclass(frozen=True)
+class GeocoderSettings:
+    provider: str = "disabled"
+    user_agent: str = ""
+    base_url: str = NOMINATIM_PUBLIC_URL
+
+
+def get_geocoder_settings(environment: Optional[str] = None) -> GeocoderSettings:
+    """Disabled by default; operators can switch it off without a code release."""
+    environment = environment or _get_setting("APP_ENV", "development")
+    provider = (_get_setting("GEOCODER_PROVIDER", "disabled") or "disabled").strip()
+    if provider not in GEOCODER_PROVIDERS:
+        raise ValueError("GEOCODER_PROVIDER must be disabled, fake or nominatim.")
+    if provider == "fake" and environment == "production":
+        raise ValueError("GEOCODER_PROVIDER=fake is for development and tests only.")
+    user_agent = (_get_setting("GEOCODER_USER_AGENT", "") or "").strip()
+    base_url = (_get_setting("GEOCODER_BASE_URL", NOMINATIM_PUBLIC_URL) or "").strip().rstrip("/")
+    if provider == "nominatim":
+        # Nominatim policy: identify the application; stock library agents are refused.
+        if not 8 <= len(user_agent) <= 200 or not user_agent.isprintable() or (
+            user_agent.lower().startswith(("python-httpx", "python-requests", "curl/"))
+        ) or "you@example.com" in user_agent:
+            raise ValueError("GEOCODER_USER_AGENT must identify the application and a contact.")
+        url = urlsplit(base_url)
+        if (url.scheme != "https" and environment == "production") or url.scheme not in (
+            "http", "https",
+        ) or not url.hostname or url.username or url.password or url.query or url.fragment:
+            raise ValueError("GEOCODER_BASE_URL must be an HTTP(S) origin; production requires HTTPS.")
+    return GeocoderSettings(provider=provider, user_agent=user_agent, base_url=base_url)

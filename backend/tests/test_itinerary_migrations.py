@@ -31,7 +31,7 @@ def test_metadata():
     assert str(table.c.start_time.type) == "TIME"
     assert not table.c.start_time.type.timezone
     assert table.c.updated_at.type.timezone
-    assert {fk.ondelete for fk in table.foreign_keys} == {"CASCADE", "RESTRICT"}
+    assert {fk.ondelete for fk in table.foreign_keys} == {"CASCADE", "RESTRICT", "SET NULL (place_id)"}
     assert "uq_itinerary_trip_date_position" in {c.name for c in table.constraints}
 
 
@@ -41,8 +41,8 @@ def test_0004_round_trip(migrated_database, item_values):
     command.check(config)
     columns = {c["name"]: c for c in inspect(conn).get_columns("itinerary_items")}
     assert columns["id"]["identity"]
-    assert len(columns) == 12
-    assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0005"
+    assert len(columns) == 13
+    assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0007"
     command.downgrade(config, "0003")
     assert "itinerary_items" not in inspect(conn).get_table_names()
     assert conn.scalar(select(Trip.id)) == item_values["trip_id"]

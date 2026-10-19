@@ -16,7 +16,7 @@ const invitation = {
 const item = {
   id: 9, trip_id: 12, title: 'Temple', location: 'Asakusa',
   date: '2027-06-10', start_time: '09:30:00', end_time: null, notes: null,
-  position: 1, created_by_user_id: 7,
+  place_id: null, position: 1, created_by_user_id: 7,
   created_at: '2026-09-20T00:00:00Z', updated_at: '2026-09-20T00:00:00Z',
 }
 
@@ -54,12 +54,14 @@ describe('collaboration API adapters', () => {
     await expect(listItinerary(request, '12')).resolves.toEqual([item])
     await expect(createItineraryItem(request, '12', {
       title: item.title, date: item.date, location: item.location,
-      start_time: '09:30', end_time: null, notes: null,
+      start_time: '09:30', end_time: null, notes: null, place_id: null,
     })).resolves.toEqual(item)
     await expect(updateItineraryItem(request, '12', 9, { title: 'Updated Temple' }))
       .resolves.toMatchObject({ title: 'Updated Temple' })
     await expect(deleteItineraryItem(request, '12', 9)).resolves.toBeUndefined()
     await expect(reorderItinerary(request, '12', item.date, [9])).resolves.toEqual([item])
+    // Without an expected order the body is unchanged from before.
+    expect(JSON.parse(request.mock.calls[4][1].body)).toEqual({ date: item.date, item_ids: [9] })
     expect(request.mock.calls.map(([path]) => path)).toEqual([
       '/api/v1/trips/12/itinerary',
       '/api/v1/trips/12/itinerary',
@@ -67,6 +69,21 @@ describe('collaboration API adapters', () => {
       '/api/v1/trips/12/itinerary/9',
       '/api/v1/trips/12/itinerary/reorder',
     ])
+  })
+
+  it('parses linked places and sends the expected order', async () => {
+    const linked = { ...item, place_id: 3 }
+    const request = vi.fn().mockResolvedValueOnce([linked]).mockResolvedValueOnce([linked])
+    await expect(listItinerary(request, '12')).resolves.toEqual([linked])
+    await reorderItinerary(request, '12', item.date, [9], [9])
+    expect(JSON.parse(request.mock.calls[1][1].body)).toEqual({
+      date: item.date, item_ids: [9], expected_item_ids: [9],
+    })
+  })
+
+  it.each([undefined, '3', true])('rejects an invalid place_id: %s', async (placeId) => {
+    const request = vi.fn().mockResolvedValue([{ ...item, place_id: placeId }])
+    await expect(listItinerary(request, '12')).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
   })
 
   it('rejects malformed member and itinerary responses', async () => {

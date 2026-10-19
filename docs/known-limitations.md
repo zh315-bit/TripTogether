@@ -77,6 +77,68 @@ is production secure, production deployed, or that the full-stack web MVP is don
 - All repository files were untracked when Step 11 was reviewed; no commit was
   made by this task. `.gitignore` protects local secrets and AppleDouble files.
 
+## Place Search (Map P3)
+
+- Public Nominatim is best-effort with no SLA; access may be withdrawn and the
+  usage policy may change. Larger usage needs a commercial provider or a
+  self-hosted instance (swap the provider; the API contract stays the same).
+- The one-request-per-second limit is enforced across all workers/instances by
+  the single `geocoder_throttle` row. Excess searches get 429 immediately
+  instead of queueing, so one heavy user can delay others; there is no
+  per-user fairness.
+- The result cache is per process (24 h TTL, 1000 entries) and is lost on
+  restart; only the throttle is shared.
+- No automatic retries. Upstream 403/429 starts a 60-second shared cooldown.
+- Results use Nominatim's default language; Accept-Language is not forwarded.
+- Saved search results are trusted as submitted: the server validates
+  coordinate ranges and identifier format but does not re-verify the
+  coordinates against the provider.
+
+## Routes and Optimization (Map P4)
+
+- Distances are straight-line (great-circle) kilometres between consecutive
+  located items. They are not road, walking or transit distance or time, and a
+  shorter straight line does not guarantee a faster real trip.
+- Optimization is nearest neighbour plus 2-opt from every first stop. It is a
+  heuristic, not a guaranteed shortest route; on seeded random tests it matched
+  the exact optimum in about 98% of small cases and was within 12% otherwise.
+- Timed items, unlocated items and (by default) the first item are fixed;
+  only runs between them are reordered. There are no time windows, opening
+  hours or durations, and no fixed final stop other than a following anchor.
+- At most 50 items per day can be optimized.
+- Itinerary `location` is a text snapshot taken when a place is linked; later
+  place renames do not update it.
+
+## Web Map (Map P5)
+
+- Default tiles come from the public OpenStreetMap tile service, which is
+  best-effort, has no SLA and forbids heavy use, prefetching and offline
+  download. It is not suitable for production traffic: before launch, set
+  `VITE_MAP_TILE_URL` to a commercial or self-hosted tile service together
+  with `VITE_MAP_TILE_ATTRIBUTION` (that provider's required credit, plain
+  text). A custom URL without a credit falls back to OSM tiles with one
+  console warning. Custom credits cannot contain links because they are
+  escaped; both values are build-time and need a frontend rebuild.
+- react-leaflet was evaluated and not used: react-leaflet 5.0.0 and
+  @react-leaflet/core 3.0.0 are Hippocratic-2.1 (not OSI-approved). The app
+  wraps Leaflet (BSD-2-Clause) directly in `LeafletMap.tsx`.
+- The map is not live: other members' changes appear after reload or after an
+  action that refetches (apply, delete). Conflicts are detected, not merged.
+- Map-click picking needs a pointer; keyboard and screen-reader users enter
+  coordinates in the manual form instead. Markers are focusable and named, and
+  every map fact is also listed in text.
+- The map does not refit when you pan unless the set of plotted positions
+  changes; showing a suggestion refits to include the dashed line.
+- With five tabs, the Trip workspace tab strip scrolls horizontally on narrow
+  phones (it already used `overflow-x: auto`).
+- The pre-existing `source-map-js` advisory (GHSA-68fv-2mgg-jv7q, build-tool
+  chain only: vite/postcss and jsdom) was fixed with a non-breaking
+  `npm audit fix` (1.2.1 → 1.2.2, lockfile only); `npm audit` now reports 0.
+- Saving a search result requires `provider` to match the running
+  `GEOCODER_PROVIDER`. This is application policy, not a database constraint:
+  places saved under an earlier provider stay valid after a switch. With search
+  disabled, only manual places can be added.
+
 ## Client Status
 
 The React + TypeScript + Vite foundation and Step13 authentication UI are

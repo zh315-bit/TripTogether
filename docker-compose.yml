@@ -41,6 +41,9 @@ services:
       JWT_ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
       CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS in .env}
+      GEOCODER_PROVIDER: ${GEOCODER_PROVIDER:-disabled}
+      GEOCODER_USER_AGENT: ${GEOCODER_USER_AGENT:-}
+      GEOCODER_BASE_URL: ${GEOCODER_BASE_URL:-https://nominatim.openstreetmap.org}
     depends_on:
       migrate:
         condition: service_completed_successfully

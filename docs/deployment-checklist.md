@@ -14,9 +14,31 @@ credential, account, or deployment command that creates cloud resources.
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | No | Yes | No | `30` |
 | `APP_ENV` | No | Yes | No | `production` |
 | `CORS_ORIGINS` | No | Yes | No | `["https://<vercel-project>.vercel.app"]` |
+| `GEOCODER_PROVIDER` | No | Optional | No | `disabled` (default) or `nominatim` |
+| `GEOCODER_USER_AGENT` | No | Required if `nominatim` | No | `TripTogether/1.0 (contact: ops@<your-domain>)` |
+| `GEOCODER_BASE_URL` | No | Optional | No | default `https://nominatim.openstreetmap.org` |
+| `VITE_MAP_TILE_URL` | Yes, build-time | No | No | `https://<tile-provider>/{z}/{x}/{y}.png` |
+| `VITE_MAP_TILE_ATTRIBUTION` | Required with a custom tile URL | No | No | `© <Provider> © OpenStreetMap contributors` |
 
 `VITE_API_BASE_URL` must be the backend **origin only**. The current client adds
 `/api/v1/...` itself; do not append `/api/v1` to this variable.
+
+What the defaults mean:
+
+- `GEOCODER_PROVIDER` unset = `disabled`: place search is off (`/geocode`
+  returns 503 `GEOCODER_DISABLED`) and users add places manually. This is a
+  safe default. `nominatim` requires `GEOCODER_USER_AGENT` (app name plus a
+  monitored contact), or production startup fails. `fake` always fails
+  production startup.
+- `GEOCODER_BASE_URL` unset = public Nominatim; it must be HTTPS in production.
+  Using the public service means accepting its usage policy (one request per
+  second for the whole app, no autocomplete).
+- `VITE_MAP_TILE_URL` unset = public OpenStreetMap tiles. That is acceptable
+  only for development and light demos; **set it to a commercial or
+  self-hosted tile service before real traffic.** A custom URL also needs
+  `VITE_MAP_TILE_ATTRIBUTION` (plain text); without it the app falls back to
+  OSM tiles and logs a warning. Both are build-time values, so redeploy Vercel
+  after changing them.
 
 ## Manual deployment order
 
@@ -44,11 +66,12 @@ credential, account, or deployment command that creates cloud resources.
    as the single migration command. Render Free has no Pre-Deploy Command, so
    run it manually from a trusted environment using the Render database URL;
    do not store that URL in the repository or shell history. Then run
-   `python -m alembic current` and confirm `0005 (head)` for this release. Never
-   put migrations in the web start command or run them in each worker.
+   `python -m alembic current` and confirm `0007 (head)` for this release. Never
+   put migrations in the web start command or run them in each worker. For an
+   existing production database, follow "Releasing a schema change" below.
 7. Set Render's HTTP health check path to `/ready`. It verifies JWT
    configuration, PostgreSQL connectivity, that the database revision matches
-   the application's single Alembic head, and that all seven core tables
+   the application's single Alembic head, and that all nine core tables
    exist. `/health` is liveness only and never accesses the database. A 503
    means readiness checks failed.
 8. After Render reports healthy, record its HTTPS `onrender.com` API origin.
@@ -66,6 +89,11 @@ credential, account, or deployment command that creates cloud resources.
 
 ## PostgreSQL choice
 
+**PostgreSQL must be version 15 or newer.** Migration 0006 uses
+`ON DELETE SET NULL (place_id)`, which older servers reject; the migration
+checks the server version and stops before running any DDL. Check it with
+`SHOW server_version;`.
+
 For a persistent portfolio demo, use a paid Render PostgreSQL plan in the same
 region as the Render backend. Render's free PostgreSQL database expires after
 30 days, has a 1 GB limit, and has no backups, so it is unsuitable for a stable
@@ -74,6 +102,44 @@ its free plan is aimed at prototypes/side projects and has current resource
 allowances, so review its live limits before relying on it. A Neon external URL
 also works because the backend normalizes standard `postgres://` and
 `postgresql://` URLs to the existing psycopg driver.
+
+## Releasing a schema change (Render Free + auto-deploy)
+
+Use this order for a release that includes migrations, such as 0006/0007 for
+the collaborative map, when Render auto-deploys `main` and there is no
+Pre-Deploy Command:
+
+1. Confirm the Render PostgreSQL version is at least 15 (`SHOW server_version;`).
+2. Back up the database (for example with `pg_dump` from a trusted machine).
+   Render Free PostgreSQL has no automatic backups.
+3. In Render, temporarily change the Web Service health check path from
+   `/ready` to `/health`.
+4. From a trusted environment with the production `DATABASE_URL`, run
+   `APP_ENV=production python -m alembic upgrade head` using the **new** code,
+   then `python -m alembic current` and confirm `0007 (head)`.
+5. Merge to `main` and wait for the Render and Vercel auto-deploys to finish.
+6. Check that `https://<render-service>/ready` returns 200, then change the
+   health check path back to `/ready`.
+7. Run the production smoke test below, including the map steps.
+
+Why this order:
+
+- `/ready` requires the database revision to equal the **running code's**
+  Alembic head. The old backend only accepts `0005`, and the new backend only
+  accepts `0007`. Whichever runs first, one of them would fail readiness
+  during the switch-over; using `/health` for that window keeps Render from
+  treating the healthy old service, or the incoming new deploy, as failed.
+- The migration runs before the code ships because the new backend needs the
+  new tables. It is safe to run while the old backend is serving: 0006 and
+  0007 only **add** tables, a nullable column, a foreign key and an index. The
+  old backend was verified against a 0007 schema: register, trips,
+  invitations, itinerary edits and reorder, expenses, balances and trip
+  deletion all work; only its `/ready` returns 503, as expected.
+
+Rollback: redeploy the previous commit first (the old backend runs on the new
+schema; keep the health check on `/health`, since its `/ready` will be 503).
+Run `python -m alembic downgrade 0005` only if the schema itself must go; it
+deletes all saved places. Then set the health check back to `/ready`.
 
 ## Production smoke test
 
@@ -89,3 +155,6 @@ also works because the backend normalizes standard `postgres://` and
    confirm redirect and error behavior.
 7. Inspect browser network requests for HTTPS API traffic and a successful CORS
    preflight. Test at a narrow mobile viewport as well as desktop.
+8. Open a trip's **Map** tab. Tiles load with the configured provider's credit.
+   Search (or, with search disabled, add a manual place), link it to an
+   itinerary item, view the day route, suggest an order, and apply it.

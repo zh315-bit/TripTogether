@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 from typing import Iterator
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user
@@ -10,12 +10,21 @@ from app.api.trips import TripID, trip_http_errors
 from app.db.session import get_db
 from app.models import User
 from app.schemas.itinerary import (
-    ItineraryItemCreate, ItineraryItemResponse, ItineraryItemUpdate, ItineraryReorderRequest,
+    ItineraryItemCreate, ItineraryItemResponse, ItineraryItemUpdate, ItineraryOptimizeRequest,
+    ItineraryOptimizeResponse, ItineraryReorderRequest, RouteResponse,
 )
+from app.schemas.trip import CalendarDate
 from app.services import itinerary
 
 
 router = APIRouter(prefix="/trips/{trip_id}/itinerary", tags=["itinerary"], responses={
+    401: {"model": APIErrorResponse}, 404: {"model": APIErrorResponse},
+    409: {"model": APIErrorResponse}, 422: {"model": APIErrorResponse},
+    503: {"model": APIErrorResponse},
+})
+# Versioned-only routes. main.py includes this before `router`, so the literal
+# /route path is matched before GET /{item_id} would reject it as a non-integer.
+route_router = APIRouter(prefix="/trips/{trip_id}/itinerary", tags=["itinerary"], responses={
     401: {"model": APIErrorResponse}, 404: {"model": APIErrorResponse},
     422: {"model": APIErrorResponse}, 503: {"model": APIErrorResponse},
 })
@@ -32,6 +41,9 @@ def itinerary_http_errors() -> Iterator[None]:
             raise APIError(status_code=422, detail=[{
                 "loc": ["body"], "msg": str(error), "type": "value_error",
             }]) from None
+        except itinerary.ItineraryConflictError:
+            raise APIError(status_code=409, detail="The itinerary order changed; review it and retry",
+                           code="ITINERARY_CONFLICT") from None
         except itinerary.ItineraryUnavailableError:
             raise APIError(status_code=503, detail="Itinerary temporarily unavailable",
                            code="ITINERARY_UNAVAILABLE") from None
@@ -95,3 +107,23 @@ def delete(
     with itinerary_http_errors():
         itinerary.delete_item(db, trip_id, current_user.id, item_id)
     return Response(status_code=204)
+
+
+@route_router.get("/route", response_model=RouteResponse)
+def day_route(
+    trip_id: TripID, date: CalendarDate = Query(),
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db),
+) -> RouteResponse:
+    """Straight-line distances between consecutive located items; not travel distance."""
+    with itinerary_http_errors():
+        return itinerary.day_route(db, trip_id, current_user.id, date)
+
+
+@route_router.post("/optimize", response_model=ItineraryOptimizeResponse)
+def optimize(
+    trip_id: TripID, payload: ItineraryOptimizeRequest,
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db),
+) -> ItineraryOptimizeResponse:
+    """Suggest a shorter straight-line order without saving it. Not guaranteed shortest."""
+    with itinerary_http_errors():
+        return itinerary.optimize_day(db, trip_id, current_user.id, payload)

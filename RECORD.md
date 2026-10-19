@@ -3405,3 +3405,310 @@ The readiness code requires a Render redeploy before it is active in production.
   skipped; lint, typecheck, production build, and `git diff --check` passed.
 - The production Vercel and Render health URLs returned HTTP 200, and all local
   README documentation and screenshot links resolve in the repository.
+
+## 2026-10-13 — Collaborative Map P1: Places and Itinerary Associations
+
+### What Was Implemented
+
+Added trip_places storage, nullable itinerary_items.place_id, database integrity
+constraints, Alembic revision 0006 (after inspecting head 0005), and readiness
+table coverage. No API, geocoding, frontend or route optimization was added.
+The revised plan was not saved as text; the user supplied the final P1 field
+definitions in this chat and authorized compatibility choices.
+
+### Files to Review
+
+- `backend/app/models/trip_place.py`
+- `backend/app/models/itinerary_item.py`
+- `backend/app/models/__init__.py`
+- `backend/migrations/versions/0006_add_trip_places_and_itinerary_associations.py`
+- `backend/app/db/check.py`
+- `backend/requirements.txt`
+- `backend/tests/test_trip_place_migrations.py`
+- Existing user, trip, itinerary and expense migration tests: updated expected
+  head/table/column counts while retaining their original constraint tests.
+- `docs/map-p1-review.md`: complete schema, compatibility decisions and commands.
+
+### Key Code to Understand
+
+FOREIGN KEY(trip_id, place_id) references trip_places(trip_id, id), backed by a
+non-deferrable composite unique constraint. ON DELETE SET NULL (place_id) only
+clears the association; it preserves trip_id, location and the itinerary row.
+Trip deletion cascades to both places and itinerary items. Provider identifiers
+are unique per Trip/provider when non-NULL; manual NULL identifiers may repeat.
+Coordinates are required Numeric(9,6) values with range checks. New IDs remain
+Integer/Identity because the repository has no UUID keys/generator to reuse.
+Timestamps retain the existing server default and SQLAlchemy update convention.
+
+### Architecture Concept
+
+Database constraints protect consistency even for direct SQL writes. They do
+not replace authorization: P2 must retain existing service membership/ownership
+checks and scope every place lookup by trip_id. API schemas remain unchanged.
+
+### How to Test
+
+Use an explicitly configured disposable PostgreSQL DATABASE_URL and the
+commands in `docs/map-p1-review.md`. Tests migrate private schemas and roll them
+back; no production database or deployment configuration was touched.
+
+- Full PostgreSQL 17 backend regression: **595 passed, 0 failed, 0 skipped**.
+- New P1 suite with minimum SQLAlchemy 2.0.40: **34 passed, 0 failed**.
+- Default backend suite: **368 passed, 0 failed, 227 PostgreSQL-gated skipped**;
+  all gated tests were run successfully in the full PostgreSQL suite above.
+- Alembic CLI upgrade head → check → downgrade 0005 → upgrade head → check
+  passed against the disposable local database; both checks reported no new
+  upgrade operations. Offline 0005:0006 SQL generation passed.
+- Syntax compilation, `pip check` and `git diff --check` passed.
+- Backend lint/format/typecheck commands are not configured in the repository
+  or CI, so those checks were unavailable; no new tooling was introduced.
+
+### Problems Encountered
+
+The supplied UUID plan conflicted with the existing integer primary keys;
+using existing types avoided any conversion of old data. Column-specific
+SET NULL requires PostgreSQL 15+ and SQLAlchemy 2.0.40+, so the existing
+SQLAlchemy minimum was raised and the migration rejects older PostgreSQL
+versions before online DDL. CI/Docker use PostgreSQL 16. Production server
+version remains unverified and must be checked before a later release.
+
+The first migration preservation test changed updated_at through SQLAlchemy's
+update hook while preparing a linked row. Its setup now uses raw SQL to isolate
+migration effects; the final test compares every old field after downgrade.
+Local PostgreSQL initialization required sandbox escalation for shared memory;
+an isolated loopback-only temporary cluster was used. Syntax compilation was
+rerun with its cache in /private/tmp after the system cache path was blocked.
+
+### What I Learned
+
+Composite FK SET NULL without a column list would also null trip_id. PostgreSQL
+15's column list protects the required Trip key without triggers or duplicate
+FKs. The trip_places composite unique indexes already support trip_id lookups,
+so a separate trip_id index is unnecessary. Upgrade preserves legacy data;
+downgrade intentionally discards the new pool and associations. DDL takes locks,
+so future production rollout needs a controlled migration window.
+
+### Next Step
+
+Amendment (2026-10-14, before push): 0006 now also adds
+`proposed_by_user_id` (FK users, RESTRICT, indexed; drives per-member map
+colors), nullable `note` String(500), and `ck_trip_places_provider_place_id`
+(manual places exactly when provider_place_id is NULL). P2 contract decisions:
+coordinates are JSON numbers; coordinates are immutable after creation.
+Verification after amendment: P1 suite **39 passed**; full backend suite with
+PostgreSQL **600 passed, 0 failed**.
+
+P2 may begin only after the user confirms P1. Implement P2 from the separately
+confirmed plan, retaining service authorization and same-Trip place checks.
+
+## 2026-10-14 — Collaborative Map P2: Trip Place CRUD
+
+Added five versioned-only endpoints under `/api/v1/trips/{trip_id}/places`
+(create, list, detail, patch, delete). Owner and accepted members have full
+CRUD; others get hidden 404. Places are scoped by trip_id and place_id; writes
+lock the Trip row. Coordinates are JSON numbers (max six decimals) and are
+immutable; PATCH accepts name/address/note only. Server sets proposer and
+provider fields. No migration, frontend, dependency or geocoding change.
+Details: `docs/map-p2-review.md`.
+
+Verification: new P2 suite plus updated API contract counts (32 operations,
+30 versioned, 28 protected). Full backend suite with PostgreSQL: **652 passed,
+0 failed**.
+
+### Next Step
+
+P3: geocoding proxy (Nominatim provider, global throttle, cache, kill switch).
+
+## 2026-10-14 — Collaborative Map P3: Geocoding Proxy
+
+Added `GET /api/v1/geocode` (authenticated, explicit search only) with a
+pluggable provider (nominatim / fake / disabled, default disabled), a
+database-backed application-wide 1 request/second throttle (migration 0007,
+`geocoder_throttle`), per-process TTL+LRU cache, shared 60 s cooldown on
+upstream 403/429, no retries, bounded timeouts and suppressed httpx URL logs.
+Place create now accepts `provider`+`provider_place_id` together; duplicates
+in a Trip are 409 `PLACE_DUPLICATE`. Production startup validates geocoder
+configuration. Details: `docs/map-p3-review.md`.
+
+Verification: full backend suite with PostgreSQL **723 passed, 0 failed**;
+`alembic check` clean at head 0007. The local development database was
+upgraded to 0007 (`alembic downgrade 0005` reverts P1-P3 schema).
+
+### Next Step
+
+P4: straight-line route calculation, optimize preview and guarded reorder.
+
+## 2026-10-14 — Collaborative Map P4: Straight-Line Routes and Optimization
+
+Itinerary items can link a same-Trip place (`place_id`, location snapshot on
+create). Added versioned-only `GET .../itinerary/route` (straight-line legs)
+and `POST .../itinerary/optimize` (read-only preview: nearest neighbour from
+every first stop + 2-opt, timed/unlocated/first items anchored, never longer
+than the original, max 50 items). Reorder accepts optional
+`expected_item_ids`; stale applies are 409 `ITINERARY_CONFLICT`, repeats are
+idempotent. Details: `docs/map-p4-review.md`.
+
+Verification: full backend suite with PostgreSQL **778 passed, 0 failed**.
+Heuristic vs brute force: 98.4% optimal over 2,100 seeded cases, worst +10.4%.
+
+### Next Step
+
+P5: frontend map tab (Leaflet), place search and pool, per-member colors,
+day route display.
+
+## 2026-10-14 — Collaborative Map P5: Web Map Tab
+
+### What Was Implemented
+
+A lazily loaded **Map** tab in the Trip workspace: explicit place search,
+saving results to a shared place pool, manual places (typed or clicked
+coordinates), editing and in-page delete confirmation, per-member marker
+colours, a "Linked place" select in the itinerary form, each day's
+straight-line route, and a "suggest shorter order" preview that is applied
+only on confirmation, with conflict detection. P5.0 (separate commit) fixed
+location refresh on place switch, parsed `place_id`, and guarded manual
+reorder with `expected_item_ids`.
+
+### Files to Review
+
+- `frontend/src/components/map/LeafletMap.tsx` (imperative Leaflet bridge)
+- `frontend/src/components/map/MapPanel.tsx` (state and data flow)
+- `frontend/src/components/map/PlaceSearch.tsx`, `PlacePool.tsx`, `DayRoutePanel.tsx`
+- `frontend/src/api/places.ts`, `frontend/src/types/places.ts`
+- `frontend/src/utils/memberColors.ts`
+- `frontend/src/components/ItineraryPanel.tsx`, `frontend/src/pages/TripDetailPage.tsx`
+- `frontend/src/api/client.ts` (`ApiError.retryAfter`)
+- `backend/app/main.py` (CORS `expose_headers`), `backend/app/schemas/trip_place.py`
+- `docs/map-p5-review.md`
+
+### Key Code to Understand
+
+- `LeafletMap` creates the map once (`useEffect([])`), keeps one layer group,
+  and redraws on prop changes; bounds refit keys on the set of positions.
+  Labels and tooltips are DOM elements built with `textContent`, so other
+  members' place names can never inject HTML.
+- `React.lazy(() => import('../components/map/MapPanel'))` plus `Suspense`
+  puts Leaflet and its CSS into a separate chunk.
+- Apply calls `reorderItinerary(..., proposed, original)`. The server compares
+  `original` with the current order under the Trip row lock; 409 means someone
+  else changed the day, so the client reloads instead of retrying.
+- Member colour = index in the member list, from a palette with tested
+  contrast; the initial and name always accompany the colour.
+
+### Architecture Concept
+
+Integrating an imperative, DOM-owning library into React through a narrow
+adapter; code splitting by route-level feature; optimistic concurrency
+surfaced in UX (preview → guarded apply → explain and reload on conflict);
+treating third-party service policy (tiles, geocoding) as a design constraint.
+
+### How to Test
+
+```bash
+cd frontend && npm run lint && npm run typecheck && npm test && npm run build
+cd ../backend && RUN_POSTGRES_TESTS=1 python -m pytest -q
+```
+
+Manual: run the backend with `GEOCODER_PROVIDER=fake` and the Vite dev
+server (see `docs/map-p5-review.md`), open a trip → Map. Search "Senso" (no
+request while typing), add it, add a manual place, link places in Itinerary,
+pick a day, Suggest, Apply. Screenshots are in `docs/screenshots/map-*.jpg`.
+Results: frontend **141 passed** (1 opt-in skipped), backend **780 passed**.
+User browser acceptance pending.
+
+### Problems Encountered
+
+- react-leaflet is Hippocratic-2.1 licensed; Leaflet was wrapped directly.
+- `Retry-After` is not CORS-safelisted, so cross-origin browsers would read
+  `null`; added `expose_headers`.
+- The manual walkthrough found that saving a `fake` search result returned
+  422 (schema accepted only `nominatim`); fixed with a round-trip test.
+- Leaflet's inline `transform` overrode a CSS offset for stop numbers; used
+  `iconAnchor` instead.
+- Unmemoized form `initial` values would reset typed input when places
+  finished loading; memoized them.
+- The contrast test rejected the first fallback grey (2.78:1 on dark).
+
+### What I Learned
+
+Licences are part of dependency review; tests built on mocked data can hide
+cross-boundary bugs that a real end-to-end pass reveals; CORS governs which
+response headers browser code can read; and accessible colour coding needs
+measured contrast plus a non-colour cue.
+
+### Next Step
+
+User browser acceptance of the Map tab (and pending Steps 14-16), then push
+`feature/collaborative-map` and open a pull request.
+
+## 2026-10-14 — Collaborative Map P5 Finishing Pass
+
+### What Was Implemented
+
+Saved place `provider` must match the running geocoder (manual-only when
+disabled); custom map tiles require a plain-text credit
+(`VITE_MAP_TILE_ATTRIBUTION`) or fall back to OSM with one warning; the map
+calls `invalidateSize()` on container resize; `.claude/` is ignored; the
+build-chain `source-map-js` advisory was fixed by a non-breaking audit fix.
+
+### Files to Review
+
+- `backend/app/services/trip_places.py` (`create_place(..., configured_provider)`)
+- `backend/app/api/trip_places.py` (shares `get_geocoding_service` with `/geocode`)
+- `frontend/src/components/map/LeafletMap.tsx` (`tileConfig`, `escapeHtml`, `ResizeObserver`)
+- `backend/tests/test_geocoding.py`, `frontend/src/components/map/LeafletMap.test.tsx`
+
+### Key Code to Understand
+
+The provider rule lives in the service, fed by the same dependency instance
+as search, so "what can be searched" and "what can be saved" cannot disagree,
+and switching configuration never invalidates stored rows. Leaflet renders
+attribution as HTML, so operator-supplied credit is escaped like user data.
+
+### Architecture Concept
+
+Configuration-dependent policy belongs in application code, not schema;
+third-party licence and credit obligations are enforced by configuration
+rules with safe fallbacks.
+
+### How to Test
+
+```bash
+cd frontend && npm run lint && npm run typecheck && npm test && npm run build && npm audit
+cd ../backend && RUN_POSTGRES_TESTS=1 python -m pytest -q
+```
+
+Results: frontend **146 passed** (1 opt-in skipped), `npm audit` 0, backend
+**784 passed**.
+
+### Problems Encountered
+
+The earlier dedupe test silently relied on the old "any known provider"
+rule and now configures Nominatim explicitly. Fixture order mattered: the
+database fixture must run before the env-isolating fixture replaces `.env`.
+A test assertion with a fallback (`?? custom`) was vacuous in jsdom (no tiles
+at zero size) and was replaced with a `tileLayer` spy. TypeScript's
+`erasableSyntaxOnly` rejected a parameter property in a test class.
+
+### What I Learned
+
+Assertions with fallbacks can pass without testing anything; policy that
+depends on runtime configuration should not be frozen into constraints.
+
+### Next Step
+
+User browser acceptance, then push `feature/collaborative-map` and open the PR.
+
+## 2026-10-14 — Map Release Deployment Docs
+
+Updated `docs/step20-production-deployment.md`, `docs/deployment-checklist.md`
+and `README.md` for the map release: `alembic current` now expects
+`0007 (head)`, `/ready` checks nine tables, PostgreSQL must be 15+, and the
+Render/Vercel tables list `GEOCODER_*` and `VITE_MAP_TILE_*` with required
+values and default meanings. Added a "Releasing a schema change (Render Free +
+auto-deploy)" procedure (version check → backup → health check `/health` →
+manual migrate → merge → restore `/ready` → smoke test) and a rollback path.
+Its safety claim was verified by running the `main` backend against a 0007
+schema: all business flows passed and only `/ready` returned 503. Historical
+`0005 (head)` and "seven tables" statements in earlier RECORD entries are
+records of past steps and were intentionally left unchanged.
