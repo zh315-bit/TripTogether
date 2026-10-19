@@ -79,6 +79,20 @@ describe('LeafletMap (real Leaflet in jsdom)', () => {
     expect(onSelectPlace).toHaveBeenLastCalledWith(null)
   })
 
+  it('frames fitTo positions and keeps that view when other markers change', () => {
+    const fit = vi.spyOn(L.Map.prototype, 'fitBounds')
+    const day: [number, number][] = [[35.71, 139.79], [35.70, 139.81]]
+    const markers = [marker('a', 'A', 'Temple'), marker('b', 'B', 'Far away', [43.06, 141.35])]
+    const { rerender } = render(<LeafletMap label="Trip map" lines={[]} markers={markers} fitTo={day} />)
+    expect(fit).toHaveBeenLastCalledWith(L.latLngBounds(day), expect.anything())
+    fit.mockClear()
+    rerender(<LeafletMap label="Trip map" lines={[]} fitTo={day}
+      markers={[...markers, marker('c', 'C', 'New place', [34.69, 135.5])]} />)
+    expect(fit).not.toHaveBeenCalled()
+    rerender(<LeafletMap label="Trip map" lines={[]} markers={markers} />)
+    expect(fit).toHaveBeenLastCalledWith(L.latLngBounds(markers.map((item) => item.position)), expect.anything())
+  })
+
   it('calls invalidateSize when the container resizes and disconnects on unmount', () => {
     const observers: { callback: ResizeObserverCallback; observe: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }[] = []
     vi.stubGlobal('ResizeObserver', class {

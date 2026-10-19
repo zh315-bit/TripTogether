@@ -21,6 +21,7 @@ This is a deployed portfolio MVP. The application deliberately keeps the domain 
 - Plan on a shared map: search or pin candidate places (colour-coded per member), link them to itinerary items, view each day's straight-line route, and apply a suggested shorter visiting order with conflict detection.
 - Select a place in the lists or on the map: both sides highlight it, and a floating card shows its details and the itinerary items it belongs to.
 - See the straight-line distance between consecutive stops right in the itinerary list, with the day's total beside its date.
+- The map frames the selected day's stops, with a one-click switch to show every place.
 
 ## Tech Stack
 
@@ -256,6 +257,13 @@ shows the straight-line hop (for example "↓ 1.82 km"), naming the starting sto
 when an item without a place sits in between, and the day's total sits beside
 its date. Any other day has a *Show distances* link that makes it the route day
 on the map and in the list.
+
+The map frames the route day's stops rather than every place in the pool, so a
+day's route fills the view. A chip in the top-right corner reads like
+"2027-04-01 · 3 stops · 4.71 km straight-line", next to a *Show all places*
+button that zooms out to the whole pool (it becomes *Focus on this day*).
+Switching days refocuses the map; a day without located stops frames every
+place.
 
 Public pages use a travel palette (sky, sea, sand and sunset) over a softly
 "breathing" gradient backdrop: an 18-second drift of colour that stops when the

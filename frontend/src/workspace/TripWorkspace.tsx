@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { BalancePanel } from '../components/BalancePanel'
@@ -9,6 +9,7 @@ import { DayRoutePanel } from '../components/map/DayRoutePanel'
 import { tripDays } from '../components/map/days'
 import { km } from '../components/map/distance'
 import { LeafletMap } from '../components/map/LeafletMap'
+import type { LatLng } from '../components/map/LeafletMap'
 import { PlaceDetailCard } from '../components/map/PlaceDetailCard'
 import { PlacePool } from '../components/map/PlacePool'
 import { PlaceSearch } from '../components/map/PlaceSearch'
@@ -61,6 +62,12 @@ export default function TripWorkspace({ trip, owner, onTripUpdated, onTripDelete
     if (placeId !== null) setSheet('peek')
   }, [selectPlace])
   const closeDetail = useCallback(() => selectPlace(null), [selectPlace])
+  // The map frames the route day's stops; "Show all places" lasts until the day changes.
+  const [showAllFor, setShowAllFor] = useState<string | null>(null)
+  const stops = map.route?.stops ?? []
+  const dayStops = useMemo<LatLng[]>(
+    () => (map.route?.stops ?? []).map((stop) => [stop.latitude, stop.longitude]), [map.route])
+  const framingDay = stops.length > 0 && showAllFor !== map.route?.date
 
   function choose(next: PanelId) {
     setParams((current) => {
@@ -136,10 +143,15 @@ export default function TripWorkspace({ trip, owner, onTripUpdated, onTripDelete
       <LeafletMap markers={map.markers} lines={map.lines} onPick={map.picking ? map.pick : undefined}
         label="Trip map with proposed places and the selected day's route"
         selectedPlaceId={map.selectedPlace?.id ?? null} hoveredPlaceId={map.hoveredPlaceId}
-        onSelectPlace={showPlace} onHoverPlace={map.hoverPlace} />
+        onSelectPlace={showPlace} onHoverPlace={map.hoverPlace} fitTo={framingDay ? dayStops : undefined} />
       <div className="map-overlay map-overlay-top">
-        {map.route && map.route.stops.length > 0 && <p className="map-chip">
-          {map.day} · {km(map.route.total_distance_km)} straight-line</p>}
+        {map.route && stops.length > 0 && <div className="map-chip-row">
+          <p className="map-chip">{map.route.date} · {stops.length} stop{stops.length === 1 ? '' : 's'} ·{' '}
+            {km(map.route.total_distance_km)} straight-line</p>
+          <button className="map-chip map-chip-button" type="button"
+            onClick={() => setShowAllFor(framingDay ? map.route!.date : null)}>
+            {framingDay ? 'Show all places' : 'Focus on this day'}</button>
+        </div>}
         {map.picking && <p className="map-chip map-chip-accent" role="status">Click the map to set the new place's coordinates.</p>}
       </div>
       {map.selectedPlace && <PlaceDetailCard place={map.selectedPlace} items={map.selectedItems}

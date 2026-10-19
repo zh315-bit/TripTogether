@@ -7,10 +7,10 @@ import type { LatLng, MapLine, MapMarker } from '../components/map/LeafletMap'
 
 // jsdom cannot lay out a real Leaflet map; this stand-in exposes what would be drawn.
 vi.mock('../components/map/LeafletMap', () => ({
-  LeafletMap: ({ markers, lines, onPick, selectedPlaceId, onSelectPlace }: {
+  LeafletMap: ({ markers, lines, onPick, selectedPlaceId, onSelectPlace, fitTo }: {
     markers: MapMarker[]; lines: MapLine[]; onPick?: (position: LatLng) => void
-    selectedPlaceId?: number | null; onSelectPlace?: (placeId: number | null) => void
-  }) => <div data-testid="map">
+    selectedPlaceId?: number | null; onSelectPlace?: (placeId: number | null) => void; fitTo?: LatLng[]
+  }) => <div data-testid="map" data-fit={fitTo ? fitTo.length : 'all'}>
     <ul aria-label="Map markers">{markers.map((marker) => <li key={marker.id} data-kind={marker.kind}
       data-color={marker.color} data-selected={String(marker.placeId !== undefined && marker.placeId === selectedPlaceId)}
     >{marker.label}|{marker.tooltip}</li>)}</ul>
@@ -320,6 +320,18 @@ describe('map workspace', () => {
     expect(screen.getByLabelText('Day')).toHaveValue('2027-06-11')
     await waitFor(() => expect(calls(fetcher, '/api/v1/trips/12/itinerary/route').map(
       ([url]) => new URL(String(url)).searchParams.get('date'))).toContain('2027-06-11'))
+  })
+
+  it('frames the route day on the map until asked to show every place', async () => {
+    const { fetcher } = server()
+    await openMap(fetcher)
+    expect(await screen.findByText(/2027-06-10 · 3 stops · 14\.3 km straight-line/)).toBeInTheDocument()
+    const map = screen.getByTestId('map')
+    expect(map).toHaveAttribute('data-fit', '3')
+    await userEvent.click(screen.getByRole('button', { name: 'Show all places' }))
+    expect(map).toHaveAttribute('data-fit', 'all')
+    await userEvent.click(screen.getByRole('button', { name: 'Focus on this day' }))
+    expect(map).toHaveAttribute('data-fit', '3')
   })
 
   it('previews a suggested order and applies it with the expected order', async () => {

@@ -30,6 +30,8 @@ type Props = {
   /** A marker click selects its place; a click on empty map clears it (null). */
   onSelectPlace?: (placeId: number | null) => void
   onHoverPlace?: (placeId: number | null) => void
+  /** Positions to frame (e.g. the selected day's stops); empty or absent frames everything. */
+  fitTo?: LatLng[]
 }
 
 function textElement(tag: string, className: string, value: string): HTMLElement {
@@ -45,7 +47,7 @@ function textElement(tag: string, className: string, value: string): HTMLElement
  * The map is created once; marker and line layers are redrawn when props change.
  */
 export function LeafletMap({
-  markers, lines, onPick, label, selectedPlaceId = null, hoveredPlaceId = null, onSelectPlace, onHoverPlace,
+  markers, lines, onPick, label, selectedPlaceId = null, hoveredPlaceId = null, onSelectPlace, onHoverPlace, fitTo,
 }: Props) {
   const container = useRef<HTMLDivElement>(null)
   const map = useRef<L.Map | null>(null)
@@ -136,10 +138,11 @@ export function LeafletMap({
     // Only on a new selection, not when markers redraw.
   }, [selectedPlaceId])
 
-  // Refit only when the set of positions changes, so redraws keep the user's view.
-  const boundsKey = useMemo(() => JSON.stringify([
+  // Refit only when the framed positions change, so redraws keep the user's view. While a
+  // focus is set, changes elsewhere (a new pool place) leave the view alone.
+  const boundsKey = useMemo(() => JSON.stringify(fitTo?.length ? fitTo : [
     ...markers.map((marker) => marker.position), ...lines.flatMap((line) => line.positions),
-  ]), [markers, lines])
+  ]), [markers, lines, fitTo])
   useEffect(() => {
     const instance = map.current
     if (!instance) return

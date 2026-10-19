@@ -63,3 +63,6 @@
 .itinerary-leg { margin: 0; padding: 2px 0 2px 16px; border-top: 1px solid var(--border); color: var(--ink-muted); font-size: 12px; font-weight: 700; }
 .itinerary-leg + .itinerary-row { padding-top: 6px; }
 .itinerary-leg + .itinerary-row::before { top: 17px; }
+.map-chip-row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.map-chip-button { border-color: var(--border); font: inherit; font-size: 13px; font-weight: 750; cursor: pointer; }
+.map-chip-button:hover { color: var(--primary-strong); border-color: var(--primary); }
