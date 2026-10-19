@@ -59,6 +59,26 @@ describe('LeafletMap (real Leaflet in jsdom)', () => {
     expect(onPick).toHaveBeenCalledTimes(1)
   })
 
+  it('selects a place from its marker, highlights it, and clears on an empty-map click', () => {
+    const onSelectPlace = vi.fn()
+    const markers = [{ ...marker('place-1', 'F', 'Temple'), placeId: 1 }, marker('other', 'R', 'Tower', [35.6, 139.7])]
+    const { container, rerender } = render(<LeafletMap label="Trip map" lines={[]} markers={markers}
+      onSelectPlace={onSelectPlace} />)
+    const [selectable, plain] = container.querySelectorAll('.map-marker')
+    fireEvent.click(selectable)
+    expect(onSelectPlace).toHaveBeenLastCalledWith(1)
+    fireEvent.click(plain)
+    expect(onSelectPlace).toHaveBeenCalledTimes(1)
+    rerender(<LeafletMap label="Trip map" lines={[]} markers={markers} onSelectPlace={onSelectPlace}
+      selectedPlaceId={1} hoveredPlaceId={1} />)
+    // A new `lines` array redraws the layers, so query the fresh marker elements.
+    const [selected, other] = container.querySelectorAll('.map-marker')
+    expect(selected).toHaveClass('is-selected', 'is-hovered')
+    expect(other).not.toHaveClass('is-selected')
+    fireEvent.click(screen.getByRole('region', { name: 'Trip map' }), { clientX: 10, clientY: 10 })
+    expect(onSelectPlace).toHaveBeenLastCalledWith(null)
+  })
+
   it('calls invalidateSize when the container resizes and disconnects on unmount', () => {
     const observers: { callback: ResizeObserverCallback; observe: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }[] = []
     vi.stubGlobal('ResizeObserver', class {

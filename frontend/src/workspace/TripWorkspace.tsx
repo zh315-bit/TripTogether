@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { BalancePanel } from '../components/BalancePanel'
@@ -8,6 +8,7 @@ import { MembersPanel } from '../components/MembersPanel'
 import { DayRoutePanel } from '../components/map/DayRoutePanel'
 import { tripDays } from '../components/map/days'
 import { LeafletMap } from '../components/map/LeafletMap'
+import { PlaceDetailCard } from '../components/map/PlaceDetailCard'
 import { PlacePool } from '../components/map/PlacePool'
 import { PlaceSearch } from '../components/map/PlaceSearch'
 import { useTripMap } from '../components/map/useTripMap'
@@ -53,6 +54,13 @@ export default function TripWorkspace({ trip, owner, onTripUpdated, onTripDelete
   const [sheet, setSheet] = useState<Sheet>('peek')
   const [balanceKey, setBalanceKey] = useState(0)
   const tabs = useRef<(HTMLButtonElement | null)[]>([])
+  const { selectPlace } = map
+  // On phones the sheet drops to its peek height so the map and the detail card show.
+  const showPlace = useCallback((placeId: number | null) => {
+    selectPlace(placeId)
+    if (placeId !== null) setSheet('peek')
+  }, [selectPlace])
+  const closeDetail = useCallback(() => selectPlace(null), [selectPlace])
 
   function choose(next: PanelId) {
     setParams((current) => {
@@ -102,7 +110,8 @@ export default function TripWorkspace({ trip, owner, onTripUpdated, onTripDelete
             {map.notice && <p className="success-message" role="status">{map.notice}</p>}
             <PlaceSearch onAdd={map.addResult} />
             <PlacePool places={map.places} styles={map.styles} picking={map.picking} picked={map.picked}
-              onTogglePicking={map.togglePicking}
+              onTogglePicking={map.togglePicking} selectedPlaceId={map.selectedPlace?.id ?? null}
+              hoveredPlaceId={map.hoveredPlaceId} onSelect={showPlace} onHover={map.hoverPlace}
               onCreate={map.createManual} onUpdate={map.update} onDelete={map.remove} />
           </>}
           {panel === 'itinerary' && <>
@@ -111,7 +120,8 @@ export default function TripWorkspace({ trip, owner, onTripUpdated, onTripDelete
               onKeepFirst={map.setKeepFirst} pending={map.pending} message={map.routeMessage}
               onSuggest={() => void map.suggest()} onApply={() => void map.apply()} onCancel={map.cancelPlan} />
             <ItineraryPanel trip={trip} places={map.places} refreshKey={map.itineraryVersion}
-              onChanged={() => void map.refreshItinerary()} />
+              onChanged={() => void map.refreshItinerary()} selectedPlaceId={map.selectedPlace?.id ?? null}
+              onSelectPlace={showPlace} onHoverPlace={map.hoverPlace} />
           </>}
           {panel === 'expenses' && <ExpensePanel tripId={String(trip.id)} onChanged={() => setBalanceKey((key) => key + 1)} />}
           {panel === 'balances' && <BalancePanel tripId={String(trip.id)} refreshKey={balanceKey} />}
@@ -123,13 +133,18 @@ export default function TripWorkspace({ trip, owner, onTripUpdated, onTripDelete
     </aside>
     <div className="workspace-map">
       <LeafletMap markers={map.markers} lines={map.lines} onPick={map.picking ? map.pick : undefined}
-        label="Trip map with proposed places and the selected day's route" />
+        label="Trip map with proposed places and the selected day's route"
+        selectedPlaceId={map.selectedPlace?.id ?? null} hoveredPlaceId={map.hoveredPlaceId}
+        onSelectPlace={showPlace} onHoverPlace={map.hoverPlace} />
       <div className="map-overlay map-overlay-top">
         {map.route && map.route.stops.length > 0 && <p className="map-chip">
           {map.day} · {km(map.route.total_distance_km)} straight-line</p>}
         {map.picking && <p className="map-chip map-chip-accent" role="status">Click the map to set the new place's coordinates.</p>}
       </div>
-      {map.members.length > 0 && <ul className="member-legend map-overlay map-overlay-bottom" aria-label="Member colours">
+      {map.selectedPlace && <PlaceDetailCard place={map.selectedPlace} items={map.selectedItems}
+        style={memberStyle(map.styles, map.selectedPlace.proposed_by_user_id)}
+        onClose={closeDetail} onShowInList={() => choose('places')} />}
+      {map.members.length > 0 && !map.selectedPlace && <ul className="member-legend map-overlay map-overlay-bottom" aria-label="Member colours">
         {map.members.map((member) => {
           const style = memberStyle(map.styles, member.user_id)
           return <li key={member.user_id}><span className="member-swatch" style={{ background: style.color }}

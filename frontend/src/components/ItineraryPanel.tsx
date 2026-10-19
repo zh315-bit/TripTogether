@@ -18,6 +18,10 @@ type Props = {
   onChanged?: () => void
   /** Changes when the itinerary was changed outside this panel (e.g. an applied route). */
   refreshKey?: number
+  /** Linked places are highlighted and selectable, in sync with the map. */
+  selectedPlaceId?: number | null
+  onSelectPlace?: (placeId: number) => void
+  onHoverPlace?: (placeId: number | null) => void
 }
 
 const blank = (date: string): ItineraryInput => ({
@@ -126,7 +130,9 @@ function ItemForm({
   </form>
 }
 
-export function ItineraryPanel({ trip, places: sharedPlaces, onChanged, refreshKey = 0 }: Props) {
+export function ItineraryPanel({
+  trip, places: sharedPlaces, onChanged, refreshKey = 0, selectedPlaceId = null, onSelectPlace, onHoverPlace,
+}: Props) {
   const { request } = useAuth()
   const [items, setItems] = useState<ItineraryItem[]>([])
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -216,10 +222,17 @@ export function ItineraryPanel({ trip, places: sharedPlaces, onChanged, refreshK
       {grouped.map(([date, dayItems]) => <section className="itinerary-day" key={date}>
         <h3>{date}</h3>
         <div className="itinerary-list">
-          {dayItems.map((item, index) => <article className="itinerary-row" key={item.id}>
+          {dayItems.map((item, index) => <article key={item.id}
+            className={`itinerary-row${item.place_id !== null && item.place_id === selectedPlaceId ? ' is-selected' : ''}`}
+            onMouseEnter={item.place_id === null ? undefined : () => onHoverPlace?.(item.place_id)}
+            onMouseLeave={item.place_id === null ? undefined : () => onHoverPlace?.(null)}>
             <div><strong>{item.title}</strong>
               <span className="trip-meta">{[item.start_time?.slice(0, 5), item.location].filter(Boolean).join(' · ') || 'No time or location'}</span>
-              {item.place_id !== null && <span className="trip-meta">Place: {placeNames.get(item.place_id) ?? 'linked place'}</span>}
+              {item.place_id !== null && (onSelectPlace
+                ? <button className="place-link-button" type="button" onClick={() => onSelectPlace(item.place_id!)}
+                  aria-label={`Show ${placeNames.get(item.place_id) ?? 'linked place'} on the map`}>
+                  Place: {placeNames.get(item.place_id) ?? 'linked place'}</button>
+                : <span className="trip-meta">Place: {placeNames.get(item.place_id) ?? 'linked place'}</span>)}
               {item.notes && <p className="muted-copy">{item.notes}</p>}
             </div>
             <div className="actions">

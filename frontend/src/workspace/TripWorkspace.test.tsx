@@ -7,11 +7,15 @@ import type { LatLng, MapLine, MapMarker } from '../components/map/LeafletMap'
 
 // jsdom cannot lay out a real Leaflet map; this stand-in exposes what would be drawn.
 vi.mock('../components/map/LeafletMap', () => ({
-  LeafletMap: ({ markers, lines, onPick }: {
+  LeafletMap: ({ markers, lines, onPick, selectedPlaceId, onSelectPlace }: {
     markers: MapMarker[]; lines: MapLine[]; onPick?: (position: LatLng) => void
+    selectedPlaceId?: number | null; onSelectPlace?: (placeId: number | null) => void
   }) => <div data-testid="map">
     <ul aria-label="Map markers">{markers.map((marker) => <li key={marker.id} data-kind={marker.kind}
-      data-color={marker.color}>{marker.label}|{marker.tooltip}</li>)}</ul>
+      data-color={marker.color} data-selected={String(marker.placeId !== undefined && marker.placeId === selectedPlaceId)}
+    >{marker.label}|{marker.tooltip}</li>)}</ul>
+    {onSelectPlace && markers.filter((marker) => marker.kind === 'place').map((marker) => <button key={marker.id}
+      type="button" onClick={() => onSelectPlace(marker.placeId ?? null)}>Click marker {marker.tooltip}</button>)}
     {lines.map((line) => <span key={line.id} data-testid={`line-${line.id}`}
       data-dashed={String(Boolean(line.dashed))}>{line.positions.length}</span>)}
     {onPick && <button type="button" onClick={() => onPick([35.123456, 139.654321])}>Simulate map click</button>}
@@ -374,6 +378,44 @@ describe('map workspace', () => {
     await openMap(fetcher, 'Itinerary')
     await userEvent.click(screen.getByRole('button', { name: 'Suggest shorter order' }))
     expect(await screen.findByText('Route optimization supports at most 50 items per day')).toBeInTheDocument()
+  })
+
+  it('syncs a place picked in the list with the map and opens its detail card', async () => {
+    const { fetcher } = server()
+    await openMap(fetcher)
+    await userEvent.click(screen.getByRole('button', { name: 'Show Senso-ji on the map' }))
+    const card = screen.getByRole('region', { name: 'Senso-ji' })
+    expect(within(card).getByText('Proposed by friend')).toBeInTheDocument()
+    expect(within(card).getByText('Temple')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show Senso-ji on the map' })).toHaveAttribute('aria-pressed', 'true')
+    // The pool marker and the day-route stop for the same place both highlight.
+    const selected = within(screen.getByRole('list', { name: 'Map markers' })).getAllByRole('listitem')
+      .filter((li) => li.dataset.selected === 'true')
+    expect(selected.map((li) => li.dataset.kind)).toEqual(['place', 'stop'])
+    expect(screen.queryByRole('list', { name: 'Member colours' })).not.toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('region', { name: 'Senso-ji' })).not.toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'Member colours' })).toBeInTheDocument()
+  })
+
+  it('opens the card from a map marker and jumps back to the place list', async () => {
+    const { fetcher } = server()
+    await openMap(fetcher, 'Itinerary')
+    await userEvent.click(screen.getByRole('button', { name: /^Click marker Tower/ }))
+    const card = screen.getByRole('region', { name: 'Tower' })
+    expect(within(card).getByText('Tower visit')).toBeInTheDocument()
+    await userEvent.click(within(card).getByRole('button', { name: 'Show in place list' }))
+    expect(screen.getByRole('tab', { name: 'Places' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('button', { name: 'Show Tower on the map' })).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(within(card).getByRole('button', { name: 'Close place details' }))
+    expect(screen.queryByRole('region', { name: 'Tower' })).not.toBeInTheDocument()
+  })
+
+  it('selects a linked place from an itinerary row', async () => {
+    const { fetcher } = server()
+    await openMap(fetcher, 'Itinerary')
+    await userEvent.click(await screen.findByRole('button', { name: 'Show Tower on the map' }))
+    expect(screen.getByRole('region', { name: 'Tower' })).toBeInTheDocument()
   })
 })
 

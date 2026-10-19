@@ -43,6 +43,9 @@ export function useTripMap(trip: Trip) {
   const [routeMessage, setRouteMessage] = useState('')
   // Bumped when the map changes the itinerary itself (apply), so list views reload.
   const [itineraryVersion, setItineraryVersion] = useState(0)
+  // Shared by the map and the lists: a place picked in one is highlighted in the other.
+  const [selectedPlaceId, setSelectedPlaceId] = useState<number | null>(null)
+  const [hoveredPlaceId, setHoveredPlaceId] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     setStatus('loading')
@@ -89,12 +92,14 @@ export function useTripMap(trip: Trip) {
     ...places.map((place) => {
       const style = memberStyle(styles, place.proposed_by_user_id)
       return {
-        id: `place-${place.id}`, position: [place.latitude, place.longitude] as LatLng, kind: 'place' as const,
+        id: `place-${place.id}`, placeId: place.id, position: [place.latitude, place.longitude] as LatLng,
+        kind: 'place' as const,
         label: style.initial, color: style.color, tooltip: `${place.name} — proposed by ${style.name}`,
       }
     }),
     ...(route?.stops ?? []).map((stop, index) => ({
-      id: `stop-${stop.item_id}`, position: [stop.latitude, stop.longitude] as LatLng, kind: 'stop' as const,
+      id: `stop-${stop.item_id}`, placeId: stop.place_id, position: [stop.latitude, stop.longitude] as LatLng,
+      kind: 'stop' as const,
       label: String(index + 1), color: ROUTE_COLOR,
       tooltip: `${index + 1}. ${itemsById.get(stop.item_id)?.title ?? stop.name} (${stop.name})`,
     })),
@@ -111,6 +116,12 @@ export function useTripMap(trip: Trip) {
     }
     return result
   }, [route, plan])
+
+  // A deleted place simply stops matching, so the detail card closes on its own.
+  const selectedPlace = useMemo(
+    () => places.find((place) => place.id === selectedPlaceId) ?? null, [places, selectedPlaceId])
+  const selectedItems = useMemo(
+    () => selectedPlace ? items.filter((item) => item.place_id === selectedPlace.id) : [], [items, selectedPlace])
 
   const pick = useCallback((position: LatLng) => {
     setPicked(position)
@@ -206,6 +217,7 @@ export function useTripMap(trip: Trip) {
   return {
     status, loadMessage, load, notice, members, places, items, itemsById, styles,
     markers, lines, picking, picked, pick, togglePicking: () => setPicking((value) => !value),
+    selectedPlace, selectedItems, selectPlace: setSelectedPlaceId, hoveredPlaceId, hoverPlace: setHoveredPlaceId,
     day, setDay, route, plan, keepFirst, setKeepFirst, pending, routeMessage,
     addResult, createManual, update, remove, suggest, apply, cancelPlan, refreshItinerary, itineraryVersion,
   }
