@@ -1,19 +1,19 @@
-import { BrowserRouter, Link, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Link, Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import { ProtectedRoute } from './auth/ProtectedRoute'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { AccountPage } from './pages/AccountPage'
 import { LogoutButton } from './components/LogoutButton'
-import { TripsPage } from './pages/TripsPage'
-import { TripDetailPage } from './pages/TripDetailPage'
+import { WorkspacePage } from './workspace/WorkspacePage'
 import tripTogetherLogo from './assets/triptogether-logo.png'
 import './App.css'
 
-function Shell() {
+/** Public and account pages: header, footer and the breathing travel backdrop. */
+function PublicLayout() {
   const { state } = useAuth()
   return (
-    <div className="app-shell">
+    <div className="app-shell breathing-bg">
       <header className="site-header">
         <Link className="brand" to="/">
           <span className="brand-logo" aria-hidden="true" style={{ backgroundImage: `url(${tripTogetherLogo})` }} />
@@ -21,7 +21,7 @@ function Shell() {
         </Link>
         <nav className="header-nav" aria-label="Main navigation">
           {state.status === 'authenticated' ? <>
-            <Link to="/trips">Trips</Link>
+            <Link to="/trips">Open map</Link>
             <Link to="/account">Account</Link>
             <span className="user-chip"><span>{state.user.username}</span><span>{state.user.email}</span></span>
             <LogoutButton className="nav-button" />
@@ -33,17 +33,7 @@ function Shell() {
       </header>
 
       <main className="page-content">
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route element={<ProtectedRoute />}>
-            <Route path="/trips" element={<TripsPage />} />
-            <Route path="/trips/:tripId" element={<TripDetailPage />} />
-            <Route path="/account" element={<AccountPage />} />
-          </Route>
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+        <Outlet />
       </main>
 
       <footer className="site-footer">
@@ -56,7 +46,8 @@ function Shell() {
 
 function HomePage() {
   const { state } = useAuth()
-  const authenticated = state.status === 'authenticated'
+  // Signed-in travellers land on their map, not the marketing page.
+  if (state.status === 'authenticated') return <Navigate to="/trips" replace />
   return <>
     <section className="landing" aria-labelledby="page-title">
       <div className="landing-copy-block">
@@ -64,10 +55,8 @@ function HomePage() {
         <h1 id="page-title">Plan together.<br /><em>Travel better.</em></h1>
         <p className="landing-copy">Build the journey, keep every detail in sync, and split shared costs without a spreadsheet.</p>
         <div className="actions landing-actions">
-        {authenticated ? <Link className="primary-button" to="/trips">Go to trips</Link> : <>
           <Link className="primary-button" to="/register">Start planning</Link>
           <Link className="retry-button" to="/login">Log in</Link>
-        </>}
         </div>
       </div>
       <div className="landing-preview" aria-label="TripTogether product preview">
@@ -101,7 +90,24 @@ function NotFoundPage() {
 function App() {
   return (
     <BrowserRouter>
-      <AuthProvider><Shell /></AuthProvider>
+      <AuthProvider>
+        <Routes>
+          <Route element={<PublicLayout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route element={<ProtectedRoute />}>
+              <Route path="/account" element={<AccountPage />} />
+            </Route>
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+          {/* The workspace fills the viewport: its own top bar, no site header or footer. */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/trips" element={<WorkspacePage />} />
+            <Route path="/trips/:tripId" element={<WorkspacePage />} />
+          </Route>
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   )
 }
