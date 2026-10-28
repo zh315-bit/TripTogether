@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError } from '../../api/client'
-import { listItinerary, listMembers, reorderItinerary } from '../../api/collaboration'
+import { createItineraryItem, listItinerary, listMembers, reorderItinerary } from '../../api/collaboration'
 import {
   createPlace, deletePlace, getDayRoute, listPlaces, optimizeDay, updatePlace,
 } from '../../api/places'
@@ -173,6 +173,19 @@ export function useTripMap(trip: Trip) {
     await loadRoute()
   }
 
+  /** Appends the place to the route day's itinerary; the server fills location from its name. */
+  async function addToDay(place: TripPlace) {
+    // Titles are capped at 160 characters, place names at 200.
+    const created = await createItineraryItem(request, tripId, {
+      title: place.name.slice(0, 160).trim(), date: day, location: null, start_time: null, end_time: null,
+      notes: null, place_id: place.id,
+    })
+    setItems((current) => [...current, created])
+    setItineraryVersion((version) => version + 1)
+    setNotice(`${place.name} added to ${day}.`)
+    await loadRoute()
+  }
+
   async function suggest() {
     setPending('suggest')
     setRouteMessage('')
@@ -219,7 +232,7 @@ export function useTripMap(trip: Trip) {
     markers, lines, picking, picked, pick, togglePicking: () => setPicking((value) => !value),
     selectedPlace, selectedItems, selectPlace: setSelectedPlaceId, hoveredPlaceId, hoverPlace: setHoveredPlaceId,
     day, setDay, route, plan, keepFirst, setKeepFirst, pending, routeMessage,
-    addResult, createManual, update, remove, suggest, apply, cancelPlan, refreshItinerary, itineraryVersion,
+    addResult, createManual, update, remove, addToDay, suggest, apply, cancelPlan, refreshItinerary, itineraryVersion,
   }
 }
 

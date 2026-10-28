@@ -69,6 +69,9 @@ export default function TripWorkspace({ trip, owner, onTripUpdated, onTripDelete
   const dayStops = useMemo<LatLng[]>(
     () => (map.route?.stops ?? []).map((stop) => [stop.latitude, stop.longitude]), [map.route])
   const framingDay = stops.length > 0 && showAllFor !== map.route?.date
+  const days = useMemo(() => tripDays(trip.start_date, trip.end_date), [trip.start_date, trip.end_date])
+  const scheduledPlaceIds = useMemo(() => new Set(map.items
+    .filter((item) => item.date === map.day && item.place_id !== null).map((item) => item.place_id!)), [map.items, map.day])
 
   function choose(next: PanelId) {
     setParams((current) => {
@@ -120,10 +123,12 @@ export default function TripWorkspace({ trip, owner, onTripUpdated, onTripDelete
             <PlacePool places={map.places} styles={map.styles} picking={map.picking} picked={map.picked}
               onTogglePicking={map.togglePicking} selectedPlaceId={map.selectedPlace?.id ?? null}
               hoveredPlaceId={map.hoveredPlaceId} onSelect={showPlace} onHover={map.hoverPlace}
+              days={days} day={map.day} onDay={map.setDay} onAddToDay={map.addToDay}
+              scheduledPlaceIds={scheduledPlaceIds}
               onCreate={map.createManual} onUpdate={map.update} onDelete={map.remove} />
           </>}
           {panel === 'itinerary' && <>
-            <DayRoutePanel days={tripDays(trip.start_date, trip.end_date)} day={map.day} onDay={map.setDay}
+            <DayRoutePanel days={days} day={map.day} onDay={map.setDay}
               route={map.route} plan={map.plan} itemsById={map.itemsById} keepFirst={map.keepFirst}
               onKeepFirst={map.setKeepFirst} pending={map.pending} message={map.routeMessage}
               onSuggest={() => void map.suggest()} onApply={() => void map.apply()} onCancel={map.cancelPlan} />

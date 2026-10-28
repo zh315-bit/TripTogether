@@ -26,7 +26,7 @@ A full-stack web app where a small group plans a trip on a shared map, keeps one
 | --- | --- |
 | Trips & members | Register (Argon2id), sign in (JWT), create trips, invite registered users, accept or reject invitations |
 | Itinerary | Date-grouped items with create, edit, delete and drag-and-drop reorder (dnd-kit, keyboard accessible) |
-| Map | Search or pin places, link them to items, select from list or map with two-way highlight, frame the selected day, apply a suggested shorter order |
+| Map | Search or pin places, add a pool place to any day in one click, link them to items, select from list or map with two-way highlight, frame the selected day, apply a suggested shorter order |
 | Expenses | Exact-decimal expenses with equal splits, per-member summary ("You owe", "You paid", "Your share") |
 | Balances | Server-derived balances and suggested transfers to settle the trip |
 | UX | Responsive map workspace (sidebar on desktop, bottom sheet on phones), loading/empty/error states, in-page confirmations |

@@ -93,3 +93,10 @@
 @media (prefers-reduced-motion: reduce) {
   .map-marker, .place-row { transition: none; }
 }
+
+/* Add a pool place straight to the route day. */
+.place-pool-day { display: grid; gap: 6px; }
+.place-day-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+.place-add-button { min-height: 28px; padding: 3px 10px; border: 1px solid var(--primary); border-radius: 999px; background: var(--primary-light); color: var(--primary-strong); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
+.place-add-button:hover:not(:disabled) { background: var(--primary); color: #fff; }
+.place-add-button:disabled { opacity: .6; cursor: default; }

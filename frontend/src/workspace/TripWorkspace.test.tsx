@@ -334,6 +334,33 @@ describe('map workspace', () => {
     expect(map).toHaveAttribute('data-fit', '3')
   })
 
+  it('adds a pool place to the chosen day and marks it as scheduled', async () => {
+    const { fetcher } = server((url, init) => {
+      if (url.pathname.endsWith('/itinerary') && init.method === 'POST') {
+        const body = JSON.parse(String(init.body))
+        return json({ ...item(30, body.title, 1, body.place_id), date: body.date, location: 'Senso-ji' }, 201)
+      }
+      return undefined
+    })
+    await openMap(fetcher)
+    const pool = screen.getByRole('region', { name: /Place pool/ })
+    // Both places already have an item on the first day.
+    expect(within(pool).getAllByText('On 06-10')).toHaveLength(2)
+    await userEvent.selectOptions(within(pool).getByLabelText('Add places to'), '2027-06-11')
+    expect(within(pool).queryByText(/^On /)).not.toBeInTheDocument()
+    await userEvent.click(within(pool).getByRole('button', { name: 'Add Senso-ji to the itinerary on 2027-06-11' }))
+    expect(await screen.findByText('Senso-ji added to 2027-06-11.')).toBeInTheDocument()
+    expect(within(pool).getAllByText('On 06-11')).toHaveLength(1)
+    const [post] = calls(fetcher, '/api/v1/trips/12/itinerary', 'POST')
+    expect(body(post)).toEqual({
+      title: 'Senso-ji', date: '2027-06-11', location: null, start_time: null, end_time: null, notes: null, place_id: 1,
+    })
+    // The map's day follows the picker, and the route reloads after adding.
+    expect(calls(fetcher, '/api/v1/trips/12/itinerary/route').map(
+      ([url]) => new URL(String(url)).searchParams.get('date')).filter((date) => date === '2027-06-11').length)
+      .toBeGreaterThanOrEqual(2)
+  })
+
   it('previews a suggested order and applies it with the expected order', async () => {
     const { fetcher } = server((url) => {
       if (url.pathname.endsWith('/optimize')) return json(plan)
