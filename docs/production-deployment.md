@@ -1,4 +1,4 @@
-# Step 20A — Production Deployment Runbook
+# Production Deployment Runbook
 
 TripTogether is deployed on Vercel, a Render Web Service, and Neon PostgreSQL
 (migrated from Render PostgreSQL on 2026-10-18).
@@ -158,7 +158,7 @@ follow this order exactly:
    confirm the file in Finder, and keep the URL out of shell history.
    Neon's 6-hour point-in-time restore is not a substitute. Agents may prepare
    these commands but do not run them: local files and production credentials
-   stay with the owner (see RECORD.md, 2026-10-18).
+   stay with the owner (migrated 2026-10-18).
 3. **Switch the Render health check to `/health`** (Web Service → Settings →
    Health Check Path) for the duration of the release.
 4. **Migrate manually with the new code.** From a trusted checkout of the
