@@ -9,6 +9,7 @@ from app.models.expense_split import ExpenseSplit
 from app.models.geocoder_throttle import GeocoderThrottle
 from app.models.auth_token import AuthToken
 from app.models.rate_limit import RateLimit
+from app.models.settlement import Settlement
 
 __all__ = ["User", "Trip", "TripPlace", "TripMember", "TripInvitation", "ItineraryItem", "Expense", "ExpenseSplit",
-           "GeocoderThrottle", "RateLimit", "AuthToken"]
+           "GeocoderThrottle", "RateLimit", "AuthToken", "Settlement"]

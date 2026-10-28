@@ -30,7 +30,7 @@ A full-stack web app where a small group plans a trip on a shared map, keeps one
 | Itinerary | Date-grouped items with create, edit, delete and drag-and-drop reorder (dnd-kit, keyboard accessible) |
 | Map | Search or pin places, add a pool place to any day in one click, link them to items, select from list or map with two-way highlight, frame the selected day, apply a suggested shorter order |
 | Expenses | Exact-decimal expenses split equally, by shares or by exact amounts (with an "adds up" check), per-member summary ("You owe", "You paid", "Your share") |
-| Balances | Server-derived balances and the fewest transfers that settle the trip, labelled as minimal or greedy |
+| Balances | Server-derived balances and the fewest transfers that settle the trip, labelled as minimal or greedy; mark a transfer as paid and the balances and suggestions update for everyone |
 | Live updates | Other members' changes appear within a second, with a notice saying who did what; conflicting edits are detected and never overwrite each other |
 | UX | Responsive map workspace (sidebar on desktop, bottom sheet on phones), loading/empty/error states, in-page confirmations |
 
@@ -170,4 +170,4 @@ This is a deliberately small, deployed MVP. The main gaps, all documented in [do
 - One currency per trip, no percentages (use shares); sessions end with the browser tab (no "remember me" cookie).
 - Public OSM tiles and Nominatim are for demos; real traffic needs a commercial or self-hosted provider.
 
-Planned next: paging in the web client once trips outgrow one screen, settlement history (marking a suggested transfer as paid), and a "remember me" cookie session.
+Planned next: paging in the web client once trips outgrow one screen, a "remember me" cookie session, and multi-currency ledgers.

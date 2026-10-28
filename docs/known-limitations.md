@@ -54,8 +54,9 @@ a claim that the service is production secure or feature complete.
   that must add up to the total; there are no percentages (express them as
   shares). Cents are apportioned by the largest-remainder method, ties to the
   lowest user ID. Balances use the stored exact shares.
-- Settlement suggestions are derived calculations, not payment processing or
-  repayment history. The transfer count is provably minimal while at most 14
+- Settlement suggestions are derived calculations, not payment processing.
+  Recorded payments are member-entered and trusted; there is no confirmation
+  by the receiving member. The transfer count is provably minimal while at most 14
   members have a nonzero balance (exact zero-sum partition search); above that
   the response says `minimal: false` and a greedy plan of at most n - 1
   transfers is returned.

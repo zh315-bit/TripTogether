@@ -35,10 +35,10 @@ def trip_values(owner_id):
 def test_0002_round_trip_preserves_users(migrated_database, owner_id):
     connection, config = migrated_database
     assert set(inspect(connection).get_table_names()) == {
-        "rate_limits", "auth_tokens", "users", "trips", "trip_members", "trip_invitations", "itinerary_items",
+        "rate_limits", "auth_tokens", "settlements", "users", "trips", "trip_members", "trip_invitations", "itinerary_items",
         "expenses", "expense_splits", "trip_places", "geocoder_throttle", "alembic_version",
     }
-    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0011"
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0012"
     foreign_keys = inspect(connection).get_foreign_keys("trips")
     assert foreign_keys[0]["referred_table"] == "users"
     assert foreign_keys[0]["constrained_columns"] == ["owner_id"]

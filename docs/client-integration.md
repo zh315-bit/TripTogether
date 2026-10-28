@@ -155,6 +155,15 @@ sums. Each returned split carries `weight` (null unless `shares`).
 `BalanceResponse.settlement` reports `transfers`, `unsettled_members` and
 `minimal`; show the suggestions as they are, they are already the fewest.
 
+## Recorded payments
+
+`GET /trips/{id}/balances` now includes `settled` per member and already
+accounts for recorded payments. To mark a suggestion as paid, `POST
+/trips/{id}/settlements` with its `from_user_id`, `to_user_id`, `amount`,
+the trip's `currency` and `paid_on`; then refetch the balances (a
+`settlement.created` event also arrives on the stream). `GET` lists the
+payments newest first; `DELETE` removes one.
+
 ## Sessions and password reset
 
 Keep both tokens from login. Send the access token as Bearer; when a request

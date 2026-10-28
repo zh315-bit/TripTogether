@@ -45,8 +45,8 @@ is recipient identity, not a Trip role. Forbidden resources remain hidden404.
 
 ## Official Client API After Step 11
 
-40 documented operations: Auth7, Trips5, Members1, Invitations4, Itinerary8,
-Expenses5, Balances1, Places5, Geocoding1, Events1, System2. Counts are method/path pairs, not distinct URLs.
+43 documented operations: Auth7, Trips5, Members1, Invitations4, Itinerary8,
+Expenses5, Balances1, Settlements3, Places5, Geocoding1, Events1, System2. Counts are method/path pairs, not distinct URLs.
 All official success schemas retain their original fields. All listed errors
 use APIErrorResponse; generic unexpected500 and infrastructure503 can occur on
 business operations. Framework unknown-path404 and wrong-method405 use the
@@ -87,6 +87,9 @@ same envelope inside `/api/v1`.
 | PATCH | /api/v1/trips/{trip_id}/expenses/{expense_id} | JWT | Owner/Member | ExpenseUpdate | 200 ExpenseResponse | 401,404,409,412,422,503 |
 | DELETE | /api/v1/trips/{trip_id}/expenses/{expense_id} | JWT | Owner/Member | None | 204 empty | 401,404,422,503 |
 | GET | /api/v1/trips/{trip_id}/balances | JWT | Owner/Member | None | 200 BalanceResponse | 401,404,409,422,503 |
+| POST | /api/v1/trips/{trip_id}/settlements | JWT | Owner/Member | SettlementCreate | 201 SettlementResponse | 401,404,409,422,503 |
+| GET | /api/v1/trips/{trip_id}/settlements | JWT | Owner/Member | limit, offset | 200 SettlementResponse[] (+ X-Total-Count) | 401,404,422,503 |
+| DELETE | /api/v1/trips/{trip_id}/settlements/{settlement_id} | JWT | Owner/Member | None | 204 empty | 401,404,422,503 |
 | GET | /api/v1/trips/{trip_id}/events | JWT | Owner/Member | None | 200 text/event-stream | 401,404,422,503 |
 | POST | /api/v1/trips/{trip_id}/places | JWT | Owner/Member | TripPlaceCreate | 201 TripPlaceResponse | 401,404,409,422,503 |
 | GET | /api/v1/trips/{trip_id}/places | JWT | Owner/Member | None | 200 TripPlaceResponse[] | 401,404,422,503 |
@@ -145,13 +148,13 @@ Do not count preflight, automatic slash redirects or HEAD as new business APIs.
 | 400 | INVALID_RESET_TOKEN, BAD_REQUEST (fallback) |
 | 401 | INVALID_CREDENTIALS, INVALID_REFRESH_TOKEN |
 | 403 | FORBIDDEN (fallback; resource policy currently uses404) |
-| 404 | TRIP_NOT_FOUND, INVITATION_NOT_FOUND, INVITEE_NOT_FOUND, ITINERARY_NOT_FOUND, EXPENSE_NOT_FOUND, NOT_FOUND |
+| 404 | SETTLEMENT_NOT_FOUND, TRIP_NOT_FOUND, INVITATION_NOT_FOUND, INVITEE_NOT_FOUND, ITINERARY_NOT_FOUND, EXPENSE_NOT_FOUND, NOT_FOUND |
 | 405 | METHOD_NOT_ALLOWED |
-| 409 | USERNAME_ALREADY_EXISTS, EMAIL_ALREADY_EXISTS, TRIP_ITINERARY_CONFLICT, INVITATION_CONFLICT, EXPENSE_CURRENCY_CONFLICT, LEDGER_INCONSISTENT |
+| 409 | USERNAME_ALREADY_EXISTS, EMAIL_ALREADY_EXISTS, TRIP_ITINERARY_CONFLICT, INVITATION_CONFLICT, EXPENSE_CURRENCY_CONFLICT, SETTLEMENT_CURRENCY_CONFLICT, LEDGER_INCONSISTENT |
 | 422 | VALIDATION_ERROR |
 | 429 | RATE_LIMITED (`Retry-After` seconds), GEOCODER_BUSY |
 | 500 | INTERNAL_ERROR |
-| 503 | PASSWORD_RESET_UNAVAILABLE, RATE_LIMITER_UNAVAILABLE, REGISTRATION_UNAVAILABLE, AUTHENTICATION_UNAVAILABLE, TRIPS_UNAVAILABLE, INVITATIONS_UNAVAILABLE, ITINERARY_UNAVAILABLE, EXPENSES_UNAVAILABLE, BALANCES_UNAVAILABLE, DATABASE_UNAVAILABLE, NOT_READY, SERVICE_UNAVAILABLE (fallback) |
+| 503 | SETTLEMENTS_UNAVAILABLE, PASSWORD_RESET_UNAVAILABLE, RATE_LIMITER_UNAVAILABLE, REGISTRATION_UNAVAILABLE, AUTHENTICATION_UNAVAILABLE, TRIPS_UNAVAILABLE, INVITATIONS_UNAVAILABLE, ITINERARY_UNAVAILABLE, EXPENSES_UNAVAILABLE, BALANCES_UNAVAILABLE, DATABASE_UNAVAILABLE, NOT_READY, SERVICE_UNAVAILABLE (fallback) |
 
 Codes are assigned at business raise sites, not inferred from English strings.
 Validation uses one stable code with useful field details rather than a giant
@@ -221,6 +224,16 @@ largest-remainder method, ties to the lowest user id. `ExpenseResponse` carries
 changes only `amount` re-apportions `equal` and `shares` splits; for an `exact`
 split it needs new `splits` too (422 otherwise). Switching methods without
 `splits` keeps the participants (weights start at 1).
+
+A **settlement** is a payment one member actually made to another
+(`POST /trips/{id}/settlements` with from, to, amount, currency, paid_on and
+an optional note; any member may record or remove one). Each
+`MemberBalance` carries `settled` (payments made minus payments received)
+and `balance = paid - share + settled`, so recorded payments shrink the
+suggestions until everyone is even. The currency must be the trip's expense
+currency and a trip without expenses accepts no payments (409
+`SETTLEMENT_CURRENCY_CONFLICT`). Payments publish `settlement.created|deleted`
+on the event stream.
 
 `BalanceResponse.settlement` is `{transfers, unsettled_members, minimal}`.
 `suggested_settlements` is the fewest transfers found: an exact zero-sum

@@ -9,8 +9,8 @@ const expense = {
 }
 const balance = {
   trip_id: 12, currency: 'USD',
-  members: [{ user_id: 1, username: 'owner', paid: '100.00', share: '50.00', balance: '50.00' },
-    { user_id: 2, username: 'member', paid: '0.00', share: '50.00', balance: '-50.00' }],
+  members: [{ user_id: 1, username: 'owner', paid: '100.00', share: '50.00', settled: '0.00', balance: '50.00' },
+    { user_id: 2, username: 'member', paid: '0.00', share: '50.00', settled: '0.00', balance: '-50.00' }],
   suggested_settlements: [{ from_user_id: 2, to_user_id: 1, amount: '50.00' }],
   settlement: { transfers: 1, unsettled_members: 2, minimal: true },
 }
