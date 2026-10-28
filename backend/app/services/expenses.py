@@ -10,6 +10,7 @@ from app.models import Expense, ExpenseSplit, Trip, TripMember
 from app.schemas.expense import ExpenseCreate, ExpenseResponse, ExpenseUpdate, SplitInput
 from app.realtime import TripEvent, stage
 from app.services.trips import get_accessible_trip
+from app.services.pagination import Page, paginate
 from app.services.versioning import require_version
 
 
@@ -111,13 +112,15 @@ def find_expense(db: Session, trip_id: int, expense_id: int) -> Expense:
     return expense
 
 
-def list_expenses(db: Session, trip_id: int, user_id: int) -> list[ExpenseResponse]:
+def list_expenses(
+    db: Session, trip_id: int, user_id: int, page: Page = Page(),
+) -> tuple[list[ExpenseResponse], int]:
     get_accessible_trip(db, trip_id, user_id)
     with expense_errors(db):
-        rows = db.execute(expense_query(trip_id).order_by(
+        rows, total = paginate(db, expense_query(trip_id).order_by(
             Expense.expense_date.desc(), Expense.created_at.desc(), Expense.id.desc(),
-        )).unique().scalars()
-        return [ExpenseResponse.model_validate(row) for row in rows]
+        ), page, unique=True)
+        return [ExpenseResponse.model_validate(row) for row in rows], total
 
 
 def get_expense(db: Session, trip_id: int, user_id: int, expense_id: int) -> ExpenseResponse:

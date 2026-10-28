@@ -136,3 +136,20 @@ def get_geocoder_settings(environment: Optional[str] = None) -> GeocoderSettings
         ) or not url.hostname or url.username or url.password or url.query or url.fragment:
             raise ValueError("GEOCODER_BASE_URL must be an HTTP(S) origin; production requires HTTPS.")
     return GeocoderSettings(provider=provider, user_agent=user_agent, base_url=base_url)
+
+
+# Login and registration are the brute-force targets; everything else sits
+# behind a Bearer token. Rules are "<requests>/<seconds>" or "off".
+RATE_LIMIT_DEFAULTS = {"login": "10/60", "register": "5/60"}
+
+
+def get_rate_limit_rule(name: str) -> Optional[str]:
+    return _get_setting(f"RATE_LIMIT_{name.upper()}", RATE_LIMIT_DEFAULTS.get(name))
+
+
+def trust_proxy_headers(environment: Optional[str] = None) -> bool:
+    """Whether X-Forwarded-For names the client. True behind Render's proxy, false when
+    the API is reached directly, where the header would let a client pick its own identity."""
+    environment = environment or _get_setting("APP_ENV", "development")
+    value = _get_setting("TRUST_PROXY_HEADERS", "1" if environment == "production" else "0")
+    return str(value).strip().lower() in ("1", "true", "yes")

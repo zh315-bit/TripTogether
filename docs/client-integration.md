@@ -155,6 +155,15 @@ sums. Each returned split carries `weight` (null unless `shares`).
 `BalanceResponse.settlement` reports `transfers`, `unsettled_members` and
 `minimal`; show the suggestions as they are, they are already the fewest.
 
+## Rate limits and request ids
+
+Login and registration answer `429 RATE_LIMITED` with `Retry-After` (seconds)
+after too many attempts from one client; show the delay and do not retry
+automatically. Every response has `X-Request-ID`; the web client keeps it on
+`ApiError.requestId` so a user report can be matched to the server's access
+log. List routes accept `?limit=&offset=` and return `X-Total-Count`; the web
+client does not page yet because trip lists are small.
+
 ## Dates and PATCH
 
 - Trip dates, itinerary date and expense_date use `YYYY-MM-DD`; these are

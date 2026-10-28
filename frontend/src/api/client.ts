@@ -10,6 +10,8 @@ export class ApiError extends Error {
   readonly details: ApiValidationIssue[]
   /** Seconds from a Retry-After header (429/503), when the server sent one. */
   readonly retryAfter: number | null
+  /** The server's X-Request-ID, so a report can be matched to one access-log line. */
+  readonly requestId: string | null
 
   constructor(
     status: number,
@@ -17,6 +19,7 @@ export class ApiError extends Error {
     message: string,
     details: ApiValidationIssue[] = [],
     retryAfter: number | null = null,
+    requestId: string | null = null,
   ) {
     super(message)
     this.name = 'ApiError'
@@ -24,6 +27,7 @@ export class ApiError extends Error {
     this.code = code
     this.details = details
     this.retryAfter = retryAfter
+    this.requestId = requestId
   }
 }
 
@@ -78,14 +82,19 @@ export type ApiRequestOptions = RequestInit & { accessToken?: string }
 
 /** The error the backend's JSON envelope describes, or a generic one for any other failure body. */
 async function errorFromResponse(response: Response): Promise<ApiError> {
-  const body: unknown = await response.json().catch(() => null)
+  return errorFromBody(response, await response.json().catch(() => null))
+}
+
+function errorFromBody(response: Response, body: unknown): ApiError {
+  const requestId = response.headers.get('X-Request-ID')
   if (isApiErrorPayload(body)) {
     return new ApiError(
       response.status, body.error.code, body.error.message, body.error.details,
-      parseRetryAfter(response.headers.get('Retry-After')),
+      parseRetryAfter(response.headers.get('Retry-After')), requestId,
     )
   }
-  return new ApiError(response.status, 'HTTP_ERROR', `The backend returned HTTP ${response.status}.`)
+  return new ApiError(
+    response.status, 'HTTP_ERROR', `The backend returned HTTP ${response.status}.`, [], null, requestId)
 }
 
 /**
@@ -143,17 +152,7 @@ export async function apiFetch<T>(
     if (response.status === 204) return undefined as T
     const body: unknown = await response.json().catch(() => null)
     if (signal.aborted) throw signal.reason
-    if (!response.ok) {
-      if (isApiErrorPayload(body)) {
-        throw new ApiError(
-          response.status, body.error.code, body.error.message, body.error.details,
-          parseRetryAfter(response.headers.get('Retry-After')),
-        )
-      }
-      throw new ApiError(
-        response.status, 'HTTP_ERROR', `The backend returned HTTP ${response.status}.`,
-      )
-    }
+    if (!response.ok) throw errorFromBody(response, body)
     if (body === null) {
       throw new ApiError(response.status, 'INVALID_RESPONSE', 'Expected a JSON response.')
     }

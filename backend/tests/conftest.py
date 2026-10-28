@@ -14,7 +14,12 @@ from sqlalchemy.orm import Session
 from app.core import config as app_config
 from app.core.config import get_database_url
 from app.db.session import get_db
-from app.main import app
+# The suite logs in and registers far more often than a real client; the
+# rate-limit tests set their own tight rules.
+os.environ.setdefault("RATE_LIMIT_LOGIN", "10000/60")
+os.environ.setdefault("RATE_LIMIT_REGISTER", "10000/60")
+
+from app.main import app  # noqa: E402
 
 
 @pytest.fixture

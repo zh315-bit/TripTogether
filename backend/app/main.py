@@ -22,7 +22,7 @@ from app.api.system import router as system_router
 from app.core.config import (
     get_app_settings, get_database_url, get_geocoder_settings, get_jwt_settings,
 )
-from app.core.logging import SafeErrorMiddleware, configure_logging
+from app.core.logging import RequestLogMiddleware, SafeErrorMiddleware, configure_logging
 from app.realtime import broker
 
 
@@ -98,11 +98,13 @@ def create_app() -> FastAPI:
     application.add_middleware(
         CORSMiddleware, allow_origins=list(settings.cors_origins), allow_credentials=False,
         allow_methods=["GET", "POST", "PATCH", "DELETE"],
-        allow_headers=["Authorization", "Content-Type", "If-Match"], max_age=600,
+        allow_headers=["Authorization", "Content-Type", "If-Match", "X-Request-ID"], max_age=600,
         # Not CORS-safelisted: without this a cross-origin client cannot read the
-        # GEOCODER_BUSY retry delay or an entity version.
-        expose_headers=["ETag", "Retry-After"],
+        # GEOCODER_BUSY retry delay, an entity version, a list total or the request id.
+        expose_headers=["ETag", "Retry-After", "X-Request-ID", "X-Total-Count"],
     )
+    # Outermost, so the id covers CORS rejections and contained errors too.
+    application.add_middleware(RequestLogMiddleware)
     return application
 
 

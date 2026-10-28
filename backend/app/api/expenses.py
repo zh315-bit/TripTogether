@@ -4,10 +4,11 @@ from typing import Iterator, Optional
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import etag, get_current_user, if_match_version
+from app.api.dependencies import page_params, etag, get_current_user, if_match_version
 from app.api.errors import APIError, APIErrorResponse
 from app.api.trips import TripID, trip_http_errors
 from app.db.session import get_db
+from app.services.pagination import Page
 from app.models import User
 from app.schemas.expense import ExpenseCreate, ExpenseResponse, ExpenseUpdate
 from app.services import expenses
@@ -50,10 +51,13 @@ def create(
 
 @router.get("", response_model=list[ExpenseResponse])
 def collection(
-    trip_id: TripID, current_user: User = Depends(get_current_user), db: Session = Depends(get_db),
+    trip_id: TripID, response: Response, current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db), page: Page = Depends(page_params),
 ) -> list[ExpenseResponse]:
     with expense_http_errors():
-        return expenses.list_expenses(db, trip_id, current_user.id)
+        rows, total = expenses.list_expenses(db, trip_id, current_user.id, page)
+    response.headers["X-Total-Count"] = str(total)
+    return rows
 
 
 @router.get("/{expense_id}", response_model=ExpenseResponse)

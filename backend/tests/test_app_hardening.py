@@ -76,7 +76,7 @@ def test_cors_401_and_disallowed_method(settings_env):
         response = client.get("/api/v1/trips", headers={"Origin": "http://localhost:3000"})
         error_contract(response, 401, "INVALID_CREDENTIALS")
         assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
-        assert response.headers["access-control-expose-headers"] == "ETag, Retry-After"
+        assert response.headers["access-control-expose-headers"] == "ETag, Retry-After, X-Request-ID, X-Total-Count"
         denied = client.options("/api/v1/trips", headers={
             "Origin": "http://localhost:3000", "Access-Control-Request-Method": "TRACE",
         })

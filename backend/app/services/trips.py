@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.models import ItineraryItem, Trip, TripMember
 from app.realtime import TripEvent, stage
 from app.schemas.trip import TripCreate, TripUpdate
+from app.services.pagination import Page, paginate
 from app.services.versioning import require_version
 
 
@@ -83,11 +84,9 @@ def get_accessible_trip(
         return trip
 
 
-def list_trips(db: Session, user_id: int) -> list[Trip]:
+def list_trips(db: Session, user_id: int, page: Page = Page()) -> tuple[list[Trip], int]:
     with database_errors(db):
-        return list(db.scalars(
-            select(Trip).where(accessible_to(user_id)).order_by(Trip.id)
-        ))
+        return paginate(db, select(Trip).where(accessible_to(user_id)).order_by(Trip.id), page)
 
 
 def update_trip(
