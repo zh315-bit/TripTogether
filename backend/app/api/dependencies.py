@@ -1,11 +1,11 @@
 import re
 from typing import Optional
 
-from fastapi import Depends, Header
+from fastapi import Depends, Header, Query, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
-from app.core.config import JWTConfigurationError
+from app.core.config import JWTConfigurationError, get_rate_limit_rule, trust_proxy_headers
 from app.api.errors import APIError
 from app.core.security import InvalidAccessTokenError, decode_access_token
 from app.db.session import get_db
@@ -15,6 +15,8 @@ from app.services.authentication import (
     InvalidCredentialsError,
     find_current_user,
 )
+from app.services.pagination import Page
+from app.services.rate_limiting import RateLimitExceededError, enforce, parse_rule
 
 
 bearer_scheme = HTTPBearer(auto_error=False, scheme_name="BearerAuth")
@@ -75,3 +77,46 @@ def if_match_version(
 
 def etag(version: int) -> str:
     return f'"{version}"'
+
+
+def page_params(
+    limit: Optional[int] = Query(
+        None, ge=1, le=200, description="Page size; omit for the whole list."),
+    offset: int = Query(0, ge=0, le=2_000_000_000, description="Rows to skip."),
+) -> Page:
+    """Optional pagination for list routes; the total is returned as X-Total-Count."""
+    return Page(limit=limit, offset=offset)
+
+
+def client_address(request: Request) -> str:
+    """The client's address, taken from X-Forwarded-For only when a trusted proxy sets it."""
+    if trust_proxy_headers():
+        forwarded = request.headers.get("x-forwarded-for", "")
+        first = forwarded.split(",")[0].strip()
+        if first:
+            return first[:100]
+    return (request.client.host if request.client else "unknown")[:100]
+
+
+def enforce_rate_limit(name: str, request: Request, db: Session) -> None:
+    """Count this request against `RATE_LIMIT_<NAME>` for the client; 429 once over.
+
+    Called after body validation inside the route, so a malformed request is
+    answered 422 without touching the database, as before. A database failure
+    surfaces as RateLimitUnavailableError for the route to report as its own
+    503, since the user-facing meaning is the same: not possible right now.
+    """
+    try:
+        rule = parse_rule(get_rate_limit_rule(name))
+    except ValueError:
+        raise APIError(status_code=503, detail="Rate limit configuration invalid",
+                       code="RATE_LIMITER_UNAVAILABLE") from None
+    if rule is None:
+        return
+    try:
+        enforce(db, f"{name}:{client_address(request)}", rule)
+    except RateLimitExceededError as error:
+        raise APIError(
+            status_code=429, detail="Too many attempts; try again shortly",
+            headers={"Retry-After": str(error.retry_after)}, code="RATE_LIMITED",
+        ) from None

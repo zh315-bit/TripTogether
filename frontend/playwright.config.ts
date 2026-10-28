@@ -37,6 +37,10 @@ export default defineConfig({
         APP_ENV: 'development',
         GEOCODER_PROVIDER: 'fake',
         CORS_ORIGINS: JSON.stringify([APP]),
+        // The suite registers and signs in far faster than a person; the
+        // brute-force limits have their own backend tests.
+        RATE_LIMIT_LOGIN: 'off',
+        RATE_LIMIT_REGISTER: 'off',
       },
     },
     {

@@ -4,9 +4,10 @@ from typing import Annotated, Iterator, Optional
 from fastapi import APIRouter, Depends, Path, Response
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import etag, get_current_user, if_match_version
+from app.api.dependencies import page_params, etag, get_current_user, if_match_version
 from app.api.errors import APIError, APIErrorResponse
 from app.db.session import get_db
+from app.services.pagination import Page
 from app.models import User
 from app.schemas.trip import TripCreate, TripResponse, TripUpdate
 from app.schemas.membership import TripMemberResponse
@@ -68,10 +69,13 @@ def create(
 
 @router.get("", response_model=list[TripResponse])
 def collection(
-    current_user: User = Depends(get_current_user), db: Session = Depends(get_db),
+    response: Response, current_user: User = Depends(get_current_user), db: Session = Depends(get_db),
+    page: Page = Depends(page_params),
 ) -> list[TripResponse]:
     with trip_http_errors():
-        return [TripResponse.model_validate(trip) for trip in trips.list_trips(db, current_user.id)]
+        rows, total = trips.list_trips(db, current_user.id, page)
+    response.headers["X-Total-Count"] = str(total)
+    return [TripResponse.model_validate(trip) for trip in rows]
 
 
 @router.get("/{trip_id}", response_model=TripResponse)

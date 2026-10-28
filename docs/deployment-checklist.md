@@ -14,6 +14,10 @@ credential, account, or deployment command that creates cloud resources.
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | No | Yes | No | `30` |
 | `APP_ENV` | No | Yes | No | `production` |
 | `CORS_ORIGINS` | No | Yes | No | `["https://<vercel-project>.vercel.app"]` |
+| `RATE_LIMIT_LOGIN` | No | Optional | No | `10/60` (default), attempts per client per window, or `off` |
+| `RATE_LIMIT_REGISTER` | No | Optional | No | `5/60` (default) or `off` |
+| `TRUST_PROXY_HEADERS` | No | Optional | No | default `1` in production: client address from `X-Forwarded-For` |
+| `LOG_FORMAT` | No | Optional | No | default `json` in production, `text` otherwise |
 | `GEOCODER_PROVIDER` | No | Optional | No | `disabled` (default) or `nominatim` |
 | `GEOCODER_USER_AGENT` | No | Required if `nominatim` | No | `TripTogether/1.0 (contact: ops@<your-domain>)` |
 | `GEOCODER_BASE_URL` | No | Optional | No | default `https://nominatim.openstreetmap.org` |
@@ -69,7 +73,7 @@ What the defaults mean:
    as the single migration command. Render Free has no Pre-Deploy Command, so
    run it manually from a trusted environment using the Render database URL;
    do not store that URL in the repository or shell history. Then run
-   `python -m alembic current` and confirm `0009 (head)` for this release. Never
+   `python -m alembic current` and confirm `0010 (head)` for this release. Never
    put migrations in the web start command or run them in each worker. For an
    existing production database, follow "Releasing a schema change" below.
 7. Set Render's HTTP health check path to `/ready`. It verifies JWT
@@ -134,7 +138,7 @@ Pre-Deploy Command:
    `/ready` to `/health`.
 4. From a trusted environment with the production `DATABASE_URL`, run
    `APP_ENV=production python -m alembic upgrade head` using the **new** code,
-   then `python -m alembic current` and confirm `0009 (head)`.
+   then `python -m alembic current` and confirm `0010 (head)`.
 5. Merge to `main` and wait for the Render and Vercel auto-deploys to finish.
 6. Check that `https://<render-service>/ready` returns 200, then change the
    health check path back to `/ready`.
@@ -143,8 +147,8 @@ Pre-Deploy Command:
 Why this order:
 
 - `/ready` requires the database revision to equal the **running code's**
-  Alembic head. The old backend only accepts `0008`, and the new backend only
-  accepts `0009`. Whichever runs first, one of them would fail readiness
+  Alembic head. The old backend only accepts `0009`, and the new backend only
+  accepts `0010`. Whichever runs first, one of them would fail readiness
   during the switch-over; using `/health` for that window keeps Render from
   treating the healthy old service, or the incoming new deploy, as failed.
 - The migration runs before the code ships because the new backend needs the

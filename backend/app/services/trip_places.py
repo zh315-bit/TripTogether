@@ -9,6 +9,7 @@ from app.models import TripPlace
 from app.schemas.trip_place import TripPlaceCreate, TripPlaceUpdate
 from app.realtime import TripEvent, stage
 from app.services.trips import get_accessible_trip
+from app.services.pagination import Page, paginate
 from app.services.versioning import require_version
 
 
@@ -50,12 +51,13 @@ def find_place(db: Session, trip_id: int, place_id: int) -> TripPlace:
     return place
 
 
-def list_places(db: Session, trip_id: int, user_id: int) -> list[TripPlace]:
+def list_places(
+    db: Session, trip_id: int, user_id: int, page: Page = Page(),
+) -> tuple[list[TripPlace], int]:
     get_accessible_trip(db, trip_id, user_id)
     with place_errors(db):
-        return list(db.scalars(
-            select(TripPlace).where(TripPlace.trip_id == trip_id).order_by(TripPlace.id)
-        ))
+        return paginate(
+            db, select(TripPlace).where(TripPlace.trip_id == trip_id).order_by(TripPlace.id), page)
 
 
 def get_place(db: Session, trip_id: int, user_id: int, place_id: int) -> TripPlace:

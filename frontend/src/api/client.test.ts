@@ -46,6 +46,17 @@ describe('API client', () => {
     },
   )
 
+  it('keeps the server request id so an error can be matched to its log line', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: { code: 'RATE_LIMITED', message: 'Too many attempts; try again shortly', details: [] },
+    }), { status: 429, headers: { 'X-Request-ID': 'req-7', 'Retry-After': '12' } })))
+    await expect(apiFetch('/api/v1/auth/login')).rejects.toMatchObject({
+      status: 429, code: 'RATE_LIMITED', retryAfter: 12, requestId: 'req-7',
+    })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('<html>', { status: 502 })))
+    await expect(apiFetch('/api/v1/trips')).rejects.toMatchObject({ code: 'HTTP_ERROR', requestId: null })
+  })
+
   it('converts transport failure into ApiError without retrying', async () => {
     const mock = vi.fn().mockRejectedValue(new TypeError())
     vi.stubGlobal('fetch', mock)

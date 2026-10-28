@@ -10,8 +10,8 @@ Step 11 implementation前，直接遍历实际 FastAPI APIRoute 并阅读所有 
 | Method | Existing Path | Auth | Role | Request | Response | Main Errors |
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | /health | No | Public | None | 200 HealthResponse | None |
-| POST | /auth/register | No | Public | UserRegister | 201 UserResponse | 409,422,503 |
-| POST | /auth/login | No | Public | UserLogin | 200 TokenResponse | 401,422,503 |
+| POST | /auth/register | No | Public | UserRegister | 201 UserResponse | 409,422,429,503 |
+| POST | /auth/login | No | Public | UserLogin | 200 TokenResponse | 401,422,429,503 |
 | GET | /auth/me | JWT | Current user | None | 200 UserResponse | 401,503 |
 | POST | /trips | JWT | Any user | TripCreate | 201 TripResponse | 401,422,503 |
 | GET | /trips | JWT | Owned/joined only | None | 200 TripResponse[] | 401,503 |
@@ -56,8 +56,8 @@ same envelope inside `/api/v1`.
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | /health | No | Public | None | 200 HealthResponse | None |
 | GET | /ready | No | Public | None | 200 ReadinessResponse | 503 |
-| POST | /api/v1/auth/register | No | Public | UserRegister | 201 UserResponse | 409,422,503 |
-| POST | /api/v1/auth/login | No | Public | UserLogin | 200 TokenResponse | 401,422,503 |
+| POST | /api/v1/auth/register | No | Public | UserRegister | 201 UserResponse | 409,422,429,503 |
+| POST | /api/v1/auth/login | No | Public | UserLogin | 200 TokenResponse | 401,422,429,503 |
 | GET | /api/v1/auth/me | JWT | Current user | None | 200 UserResponse | 401,503 |
 | POST | /api/v1/trips | JWT | Any user | TripCreate | 201 TripResponse | 401,422,503 |
 | GET | /api/v1/trips | JWT | Owned/joined only | None | 200 TripResponse[] | 401,503 |
@@ -145,13 +145,37 @@ Do not count preflight, automatic slash redirects or HEAD as new business APIs.
 | 405 | METHOD_NOT_ALLOWED |
 | 409 | USERNAME_ALREADY_EXISTS, EMAIL_ALREADY_EXISTS, TRIP_ITINERARY_CONFLICT, INVITATION_CONFLICT, EXPENSE_CURRENCY_CONFLICT, LEDGER_INCONSISTENT |
 | 422 | VALIDATION_ERROR |
+| 429 | RATE_LIMITED (`Retry-After` seconds), GEOCODER_BUSY |
 | 500 | INTERNAL_ERROR |
-| 503 | REGISTRATION_UNAVAILABLE, AUTHENTICATION_UNAVAILABLE, TRIPS_UNAVAILABLE, INVITATIONS_UNAVAILABLE, ITINERARY_UNAVAILABLE, EXPENSES_UNAVAILABLE, BALANCES_UNAVAILABLE, DATABASE_UNAVAILABLE, NOT_READY, SERVICE_UNAVAILABLE (fallback) |
+| 503 | RATE_LIMITER_UNAVAILABLE, REGISTRATION_UNAVAILABLE, AUTHENTICATION_UNAVAILABLE, TRIPS_UNAVAILABLE, INVITATIONS_UNAVAILABLE, ITINERARY_UNAVAILABLE, EXPENSES_UNAVAILABLE, BALANCES_UNAVAILABLE, DATABASE_UNAVAILABLE, NOT_READY, SERVICE_UNAVAILABLE (fallback) |
 
 Codes are assigned at business raise sites, not inferred from English strings.
 Validation uses one stable code with useful field details rather than a giant
 code enumeration. See client-integration.md for complete envelope examples.
 Never change a client-facing code casually without checking contract consumers.
+
+## Rate Limits, Pagination and Request IDs
+
+`POST /auth/login` and `POST /auth/register` are limited per client address
+(`RATE_LIMIT_LOGIN`, default 10 per 60 s; `RATE_LIMIT_REGISTER`, default 5 per
+60 s). The counter is a fixed window stored in PostgreSQL, so it holds across
+every worker and instance. Over the limit the answer is `429 RATE_LIMITED`
+with `Retry-After` in seconds; wrong passwords count, malformed bodies (422)
+do not. Behind a trusted proxy the client is the first `X-Forwarded-For`
+address; otherwise the socket peer.
+
+List routes (`GET /trips`, `/trips/{id}/itinerary`, `/trips/{id}/expenses`,
+`/trips/{id}/places`) accept optional `limit` (1-200) and `offset` (>= 0)
+query parameters and always return `X-Total-Count`. Without them the whole
+list is returned, as before. Pages follow each list's natural order (trips by
+id, itinerary by date then position, expenses newest first, places by id).
+
+Every response carries `X-Request-ID`: the client's value when it sent one
+matching `[A-Za-z0-9._-]{1,64}`, otherwise a generated id. The same id is on
+every log line written while handling the request, including the one access
+line per request (`event: request`, method, route template, status,
+duration), which never contains the query string. `X-Request-ID` and
+`X-Total-Count` are exposed to cross-origin clients.
 
 ## Live Updates and Versions
 

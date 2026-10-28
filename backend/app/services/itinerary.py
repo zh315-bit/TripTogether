@@ -15,6 +15,7 @@ from app.schemas.itinerary import (
 )
 from app.services import routing
 from app.services.trips import get_accessible_trip
+from app.services.pagination import Page, paginate
 from app.services.versioning import require_version
 
 
@@ -97,12 +98,14 @@ def assign_positions(db: Session, items: list[ItineraryItem]) -> None:
     db.flush()
 
 
-def list_items(db: Session, trip_id: int, user_id: int) -> list[ItineraryItem]:
+def list_items(
+    db: Session, trip_id: int, user_id: int, page: Page = Page(),
+) -> tuple[list[ItineraryItem], int]:
     get_accessible_trip(db, trip_id, user_id)
     with itinerary_errors(db):
-        return list(db.scalars(select(ItineraryItem).where(
+        return paginate(db, select(ItineraryItem).where(
             ItineraryItem.trip_id == trip_id,
-        ).order_by(ItineraryItem.date, ItineraryItem.position)))
+        ).order_by(ItineraryItem.date, ItineraryItem.position), page)
 
 
 def get_item(db: Session, trip_id: int, user_id: int, item_id: int) -> ItineraryItem:

@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, APIErrorResponse
-from app.api.dependencies import get_current_user, unauthorized
+from app.api.dependencies import enforce_rate_limit, get_current_user, unauthorized
 from app.core.config import JWTConfigurationError
 from app.core.security import create_access_token
 from app.db.session import get_db
@@ -13,6 +13,7 @@ from app.services.authentication import (
     InvalidCredentialsError,
     authenticate_user,
 )
+from app.services.rate_limiting import RateLimitUnavailableError
 from app.services.registration import (
     DuplicateUserError,
     RegistrationUnavailableError,
@@ -30,15 +31,17 @@ router = APIRouter(prefix="/auth", tags=["auth"])
     responses={
         409: {"model": APIErrorResponse},
         422: {"model": APIErrorResponse},
+        429: {"model": APIErrorResponse},
         503: {"model": APIErrorResponse},
     },
 )
-def register(payload: UserRegister, db: Session = Depends(get_db)) -> UserResponse:
+def register(payload: UserRegister, request: Request, db: Session = Depends(get_db)) -> UserResponse:
     try:
+        enforce_rate_limit("register", request, db)
         user = register_user(db, payload)
     except DuplicateUserError as error:
         raise APIError(status_code=409, detail=str(error), code=error.code) from None
-    except RegistrationUnavailableError:
+    except (RegistrationUnavailableError, RateLimitUnavailableError):
         raise APIError(
             status_code=503, detail="Registration temporarily unavailable", code="REGISTRATION_UNAVAILABLE",
         ) from None
@@ -51,18 +54,20 @@ def register(payload: UserRegister, db: Session = Depends(get_db)) -> UserRespon
     responses={
         401: {"model": APIErrorResponse},
         422: {"model": APIErrorResponse},
+        429: {"model": APIErrorResponse},
         503: {"model": APIErrorResponse},
     },
 )
 def login(
-    payload: UserLogin, response: Response, db: Session = Depends(get_db)
+    payload: UserLogin, request: Request, response: Response, db: Session = Depends(get_db)
 ) -> TokenResponse:
     try:
+        enforce_rate_limit("login", request, db)
         user = authenticate_user(db, payload)
         token = create_access_token(user.id)
     except InvalidCredentialsError:
         raise unauthorized("Invalid email or password") from None
-    except (AuthenticationUnavailableError, JWTConfigurationError):
+    except (AuthenticationUnavailableError, RateLimitUnavailableError, JWTConfigurationError):
         raise APIError(status_code=503, detail="Authentication temporarily unavailable",
                        code="AUTHENTICATION_UNAVAILABLE") from None
     response.headers["Cache-Control"] = "no-store"

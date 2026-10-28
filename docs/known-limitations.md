@@ -14,7 +14,11 @@ a claim that the service is production secure or feature complete.
 - Registration duplicate errors and inviting registered emails disclose account
   existence. Login uses one generic credential error and dummy hash verification,
   but this is not a formal constant-time or enumeration-proof guarantee.
-- No rate limiting, request-size policy, abuse infrastructure or load testing.
+- Rate limiting covers login and registration only, as a fixed window per
+  client address (burstier than a token bucket; up to 2x the rule at a window
+  edge). Behind a proxy it trusts the first `X-Forwarded-For` address, which
+  is only sound when the proxy overwrites the header, as Render does. No
+  request-size policy, abuse infrastructure or load testing.
   Argon2 work requires resource limits before public exposure.
 - CORS is browser policy, not authentication or a network access firewall.
   Native clients/non-browser tools can send requests without an Origin header.
@@ -56,7 +60,10 @@ a claim that the service is production secure or feature complete.
 
 ## Scale and Operations
 
-- Trip, invitation, member, itinerary and expense lists are unpaginated.
+- Trip, itinerary, expense and place lists accept `limit`/`offset` and report
+  `X-Total-Count`, but the web client does not page yet; invitation and member
+  lists are unpaginated. Offset pagination can skip or repeat a row when the
+  list changes between pages.
   Add bounded list contracts before large-scale usage; trips/invitations/
   expenses are first candidates. Daily reorder must still validate the complete
   day, and balances must aggregate the full ledger, not a display page.
