@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models import Trip, TripInvitation, TripMember, User
+from app.realtime import TripEvent, stage
 from app.services.trips import get_owned_trip
 
 
@@ -115,6 +116,7 @@ def respond_to_invitation(
                 raise InvitationConflictError("User is already a trip member")
             db.add(TripMember(trip_id=trip_id, user_id=user_id, role="member"))
             db.flush()
+            stage(db, TripEvent(trip_id, "member", "joined", user_id, user_id))
         # Both changes belong to this transaction; a later failure rolls back the INSERT.
         invitation.status = response
         invitation.responded_at = func.statement_timestamp()

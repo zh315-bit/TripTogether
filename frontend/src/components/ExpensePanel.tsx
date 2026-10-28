@@ -7,7 +7,12 @@ import { useAuth } from '../auth/AuthContext'
 import type { TripMember } from '../types/collaboration'
 import type { Expense, ExpenseInput } from '../types/finance'
 
-type Props = { tripId: string; onChanged?: () => void }
+type Props = {
+  tripId: string
+  onChanged?: () => void
+  /** Changes when another member changed the expenses; the list reloads in place. */
+  refreshKey?: number
+}
 
 function emptyExpense(date = ''): ExpenseInput {
   return {
@@ -140,7 +145,7 @@ function ExpenseForm({
   </form>
 }
 
-export function ExpensePanel({ tripId, onChanged }: Props) {
+export function ExpensePanel({ tripId, onChanged, refreshKey = 0 }: Props) {
   const { request } = useAuth()
   const [members, setMembers] = useState<TripMember[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
@@ -150,9 +155,11 @@ export function ExpensePanel({ tripId, onChanged }: Props) {
   const [busy, setBusy] = useState(false)
   const [formVersion, setFormVersion] = useState(0)
 
-  const load = useCallback(async () => {
-    setStatus('loading')
-    setMessage('')
+  const load = useCallback(async (silent = false) => {
+    if (!silent) {
+      setStatus('loading')
+      setMessage('')
+    }
     try {
       const [memberList, expenseList] = await Promise.all([
         listMembers(request, tripId),
@@ -168,8 +175,8 @@ export function ExpensePanel({ tripId, onChanged }: Props) {
   }, [request, tripId])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    void load(refreshKey > 0)
+  }, [load, refreshKey])
 
   const names = useMemo(() => new Map(members.map((member) => [member.user_id, member.username])), [members])
   const initial = editing
@@ -231,7 +238,17 @@ export function ExpensePanel({ tripId, onChanged }: Props) {
             setMessage('')
             try {
             if (editing) {
-              const updated = await updateExpense(request, tripId, editing.id, value)
+              let updated: Expense
+              try {
+                updated = await updateExpense(request, tripId, editing.id, value, editing.version)
+              } catch (error) {
+                if (!(error instanceof ApiError) || error.code !== 'STALE_VERSION') throw error
+                setEditing(null)
+                setMessage('This expense was changed by another member while you were editing. The latest version has been loaded; please review it and edit again.')
+                await load(true)
+                onChanged?.()
+                return
+              }
               setExpenses((current) => current.map((item) => item.id === updated.id ? updated : item))
               setEditing(null)
             } else {

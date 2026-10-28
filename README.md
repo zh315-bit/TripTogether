@@ -15,10 +15,11 @@ A full-stack web app where a small group plans a trip on a shared map, keeps one
 
 - **Map-first collaboration.** Members search or pin candidate places (colour-coded per person), link them to itinerary items, and see each day's route with stop-to-stop distances. A route optimiser (nearest neighbour + 2-opt, seeded from every start) proposes a shorter visiting order and detects conflicts before applying it.
 - **Money you can trust.** Amounts are `Numeric(12, 2)` end to end. Equal splits are computed once on the server with a deterministic remainder rule; the browser renders exact decimal strings and never does money arithmetic.
-- **Concurrency by design.** Writes serialise on the parent trip row (`SELECT … FOR UPDATE`), so reorders, invitations and splits keep their invariants under concurrent members. Dedicated concurrency tests cover itinerary, membership, expenses and balances.
+- **Live collaboration.** Every committed change is pushed to the other members over Server-Sent Events; their lists refresh in place with a one-line notice ("Jonas changed an itinerary item"). Events are staged inside the transaction and published only after commit, so a client never refetches a change that rolled back. A dropped stream reconnects with backoff and triggers a full resync.
+- **Concurrency by design.** Writes serialise on the parent trip row (`SELECT … FOR UPDATE`), and every editable row carries a version: clients echo it in `If-Match`, and a stale edit gets a 412 with the newer version shown instead of a silent overwrite. Dedicated concurrency tests cover itinerary, membership, expenses and balances.
 - **Shared rate limiting for an external API.** Place search proxies Nominatim behind a single database-backed throttle row, so the one-request-per-second policy holds across every worker and instance.
 - **Production-shaped from day one.** `/ready` checks JWT config, database connectivity, the Alembic head and all core tables. Migrations are a controlled release step, not a boot side effect. CORS rejects non-HTTPS origins in production.
-- **Tested at every layer.** 270+ backend tests (unit, contract, migration, PostgreSQL integration, query-count audits) and 110+ frontend tests (Vitest + Testing Library), all run in CI with a real PostgreSQL service.
+- **Tested at every layer.** 280+ backend tests (unit, contract, migration, PostgreSQL integration, query-count audits, a live SSE stream under concurrent writes) and 180+ frontend tests (Vitest + Testing Library), all run in CI with a real PostgreSQL service.
 
 ## Features
 
@@ -29,6 +30,7 @@ A full-stack web app where a small group plans a trip on a shared map, keeps one
 | Map | Search or pin places, add a pool place to any day in one click, link them to items, select from list or map with two-way highlight, frame the selected day, apply a suggested shorter order |
 | Expenses | Exact-decimal expenses with equal splits, per-member summary ("You owe", "You paid", "Your share") |
 | Balances | Server-derived balances and suggested transfers to settle the trip |
+| Live updates | Other members' changes appear within a second, with a notice saying who did what; conflicting edits are detected and never overwrite each other |
 | UX | Responsive map workspace (sidebar on desktop, bottom sheet on phones), loading/empty/error states, in-page confirmations |
 
 ## Architecture
@@ -36,7 +38,10 @@ A full-stack web app where a small group plans a trip on a shared map, keeps one
 ```mermaid
 flowchart LR
     B[React SPA<br/>TypeScript · Vite · Leaflet] -->|REST /api/v1| A[FastAPI routers]
+    A -->|SSE /trips/:id/events| B
     A --> S[Service layer<br/>trips · itinerary · expenses · balances · routing · geocoding]
+    S -->|after commit| E[Event broker]
+    E --> A
     S --> O[SQLAlchemy 2.0]
     O --> P[(PostgreSQL<br/>Alembic migrations)]
     S -->|throttled proxy| N[Nominatim geocoder]
@@ -44,7 +49,7 @@ flowchart LR
 ```
 
 - **Routers** validate input with Pydantic and map domain errors to a uniform JSON error contract.
-- **Services** own all business rules: authorisation checks, split arithmetic, balance aggregation, route optimisation and the geocoder throttle. Routers never touch the ORM directly.
+- **Services** own all business rules: authorisation checks, split arithmetic, balance aggregation, route optimisation and the geocoder throttle. Routers never touch the ORM directly. Services stage change events on the session; a SQLAlchemy `after_commit` hook hands them to the broker, and `after_rollback` discards them.
 - **Models and migrations** are versioned with Alembic (seven revisions); readiness fails until the database matches the application's single head.
 - **Frontend** keeps a centralised API client and auth context, typed contracts mirroring the backend schemas, and a lazily loaded workspace chunk so public pages stay light.
 
@@ -64,6 +69,10 @@ Detailed references: [API inventory](docs/api-inventory.md) · [Authorization ma
 | Day route with distances | Optimiser preview |
 | --- | --- |
 | ![Day route on the map with straight-line distances](docs/screenshots/map-desktop-route.jpg) | ![Suggested shorter order shown as a dashed preview](docs/screenshots/map-desktop-optimize-preview.jpg) |
+
+| Live update from another member | Stale edit refused, newer version loaded |
+| --- | --- |
+| ![Mika's window: a notice that Jonas changed an itinerary item, and the list already updated](docs/screenshots/live-update.jpg) | ![After a 412, the panel explains the item changed meanwhile and shows the latest version](docs/screenshots/edit-conflict.jpg) |
 
 | Place detail card | Conflict detected before applying |
 | --- | --- |
@@ -126,7 +135,9 @@ CI ([ci.yml](.github/workflows/ci.yml)) runs both suites on every push and pull 
 A few decisions worth knowing about:
 
 - **Why the server owns every number.** Floating-point money and client-side split logic are the classic source of "the balances don't add up". The backend stores `Decimal`, splits with a deterministic remainder (ascending user id), and returns strings; the UI only displays them.
-- **Why a trip-level row lock instead of optimistic versioning.** Groups are small and writes are rare, so serialising on the trip row is simpler to reason about than per-row version checks, and it makes the invariants (one split per member, contiguous day order) easy to prove in tests. The trade-off is documented in [known limitations](docs/known-limitations.md).
+- **Why both a trip-level lock and per-row versions.** The lock keeps the database invariants (one split per member, contiguous day order) simple to prove: writes to one trip never interleave. But a lock cannot know that a user started editing from a stale screen, so each editable row also carries a version. The client sends it as `If-Match`; a mismatch is a 412 and the UI shows the newer version instead of overwriting it. Omitting the header keeps the old last-write-wins behaviour for simple clients.
+- **Why Server-Sent Events rather than WebSocket.** The traffic is one way: the server only needs to say "something changed". SSE over `fetch` reuses the Bearer header, the CORS policy and the JSON error envelope of every other route, needs no extra dependency, and reconnects trivially. The client refetches the affected list rather than applying diffs, so the screen is always the server's committed state.
+- **Why events are published after commit.** Services stage events on the SQLAlchemy session; an `after_commit` hook publishes them and `after_rollback` drops them. A subscriber that refetches on an event therefore always sees the row that triggered it. The broker is in-process (one API instance); scaling out means putting PostgreSQL `LISTEN/NOTIFY` or Redis behind the same publish/subscribe interface.
 - **Why the throttle lives in PostgreSQL.** Nominatim's usage policy is one request per second per application, not per process. A single `geocoder_throttle` row locked on each request enforces that across workers; an upstream 403/429 starts a shared cooldown.
 - **Why Leaflet is wrapped directly.** `react-leaflet` 5 is licensed under Hippocratic 2.1 (not OSI-approved), so the app wraps Leaflet (BSD-2-Clause) in a small `LeafletMap` component.
 - **Why straight-line distances.** The optimiser needs a metric that works without a routing provider. Great-circle distance is honest about being an approximation; the UI labels it "straight-line" everywhere.
@@ -145,8 +156,8 @@ The step-by-step runbook, environment variable matrix, schema release procedure 
 
 This is a deliberately small, deployed MVP. The main gaps, all documented in [docs/known-limitations.md](docs/known-limitations.md):
 
-- No live push yet: other members' changes appear on reload or after the next write. Same-field writes are last-write-wins, with conflict detection on reorder and route apply.
+- Live updates fan out inside one API instance; running several instances needs a shared channel behind the broker. Clients that omit `If-Match` still get last-write-wins.
 - Equal splits only, one currency per trip, no refresh tokens or password reset, unpaginated lists.
 - Public OSM tiles and Nominatim are for demos; real traffic needs a commercial or self-hosted provider.
 
-Planned next: real-time updates over WebSocket with version-based conflict handling, weighted splits with a minimum-transfer settlement, and Playwright end-to-end tests in CI.
+Planned next: weighted splits with a minimum-transfer settlement, Playwright end-to-end tests in CI, and PostgreSQL `LISTEN/NOTIFY` so live updates survive scaling out.

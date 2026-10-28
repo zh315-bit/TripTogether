@@ -1,4 +1,5 @@
 import { ApiError } from './client'
+import { ifMatch } from './trips'
 import type {
   AuthenticatedRequest, Balance, Expense, ExpenseInput, ExpenseSplit,
   MemberBalance, SettlementSuggestion,
@@ -55,6 +56,7 @@ function parseExpense(body: unknown): Expense {
     paid_by_user_id: number(value.paid_by_user_id, 'paid_by_user_id'),
     expense_date: text(value.expense_date, 'expense_date'),
     created_by_user_id: number(value.created_by_user_id, 'created_by_user_id'),
+    version: number(value.version, 'version'),
     created_at: text(value.created_at, 'created_at'),
     updated_at: text(value.updated_at, 'updated_at'),
     splits: value.splits.map(parseSplit),
@@ -124,12 +126,13 @@ export async function createExpense(
 
 export async function updateExpense(
   request: AuthenticatedRequest, tripId: string, expenseId: number, payload: ExpenseInput,
+  version?: number,
 ): Promise<Expense> {
   return parseExpense(await request<unknown>(
     `/api/v1/trips/${encodeURIComponent(tripId)}/expenses/${expenseId}`,
     {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...ifMatch(version) },
       body: JSON.stringify(payload),
     },
   ))

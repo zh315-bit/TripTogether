@@ -1,6 +1,7 @@
+import re
 from typing import Optional
 
-from fastapi import Depends
+from fastapi import Depends, Header
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -50,3 +51,27 @@ def get_current_user(
     except AuthenticationUnavailableError:
         raise APIError(status_code=503, detail="Authentication temporarily unavailable",
                        code="AUTHENTICATION_UNAVAILABLE") from None
+
+
+IF_MATCH_PATTERN = re.compile(r'"?([1-9][0-9]{0,9})"?')
+
+
+def if_match_version(
+    if_match: Optional[str] = Header(
+        default=None, alias="If-Match",
+        description='The entity version last seen, as an ETag such as "3". '
+                    "A newer stored version answers 412 instead of overwriting it.",
+    ),
+) -> Optional[int]:
+    """Optional optimistic check; omitting the header keeps last-write-wins."""
+    if if_match is None or if_match.strip() == "*":
+        return None
+    match = IF_MATCH_PATTERN.fullmatch(if_match.strip())
+    if match is None or int(match.group(1)) > 2147483647:
+        raise APIError(status_code=400, detail='If-Match must be an entity version such as "3"',
+                       code="INVALID_IF_MATCH")
+    return int(match.group(1))
+
+
+def etag(version: int) -> str:
+    return f'"{version}"'

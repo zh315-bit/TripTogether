@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 
 from app.models import TripPlace
 from app.schemas.trip_place import TripPlaceCreate, TripPlaceUpdate
+from app.realtime import TripEvent, stage
 from app.services.trips import get_accessible_trip
+from app.services.versioning import require_version
 
 
 class PlaceNotFoundError(Exception):
@@ -90,6 +92,8 @@ def create_place(
         place = TripPlace(**payload.model_dump(exclude_none=True), trip_id=trip_id,
                           proposed_by_user_id=user_id)
         db.add(place)
+        db.flush()
+        stage(db, TripEvent(trip_id, "place", "created", user_id, place.id, place.version))
         db.commit()
         db.refresh(place)
         return place
@@ -97,12 +101,16 @@ def create_place(
 
 def update_place(
     db: Session, trip_id: int, user_id: int, place_id: int, payload: TripPlaceUpdate,
+    expected_version: Optional[int] = None,
 ) -> TripPlace:
     get_accessible_trip(db, trip_id, user_id, for_update=True)
     with place_errors(db):
         place = find_place(db, trip_id, place_id)
+        require_version(place, expected_version)
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(place, field, value)
+        db.flush()
+        stage(db, TripEvent(trip_id, "place", "updated", user_id, place.id, place.version))
         db.commit()
         db.refresh(place)
         return place
@@ -113,4 +121,5 @@ def delete_place(db: Session, trip_id: int, user_id: int, place_id: int) -> None
     with place_errors(db):
         # fk_itinerary_trip_place clears linked itinerary place_id values only.
         db.delete(find_place(db, trip_id, place_id))
+        stage(db, TripEvent(trip_id, "place", "deleted", user_id, place_id))
         db.commit()

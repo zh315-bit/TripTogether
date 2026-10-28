@@ -11,7 +11,7 @@ const trip = {
   end_date: '2027-06-15',
   owner_id: 7,
   created_at: '2026-09-20T00:00:00Z',
-  updated_at: '2026-09-20T00:00:00Z',
+  version: 1, updated_at: '2026-09-20T00:00:00Z',
 }
 const input: TripInput = {
   name: trip.name,
@@ -65,5 +65,13 @@ describe('trip API adapters', () => {
     const error = new ApiError(404, 'TRIP_NOT_FOUND', 'Trip not found')
     const request = vi.fn().mockRejectedValue(error)
     await expect(getTrip(request, '12')).rejects.toBe(error)
+  })
+
+  it('sends the trip version as If-Match when given', async () => {
+    const request = vi.fn().mockResolvedValue(trip)
+    await updateTrip(request, '12', { name: 'Kyoto' }, 4)
+    expect(new Headers(request.mock.calls[0][1].headers).get('If-Match')).toBe('"4"')
+    await updateTrip(request, '12', { name: 'Kyoto' })
+    expect(new Headers(request.mock.calls[1][1].headers).get('If-Match')).toBeNull()
   })
 })

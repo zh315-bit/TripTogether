@@ -17,7 +17,7 @@ const item = {
   id: 9, trip_id: 12, title: 'Temple', location: 'Asakusa',
   date: '2027-06-10', start_time: '09:30:00', end_time: null, notes: null,
   place_id: null, position: 1, created_by_user_id: 7,
-  created_at: '2026-09-20T00:00:00Z', updated_at: '2026-09-20T00:00:00Z',
+  created_at: '2026-09-20T00:00:00Z', version: 1, updated_at: '2026-09-20T00:00:00Z',
 }
 
 describe('collaboration API adapters', () => {
@@ -89,5 +89,11 @@ describe('collaboration API adapters', () => {
   it('rejects malformed member and itinerary responses', async () => {
     const request = vi.fn().mockResolvedValue([{ ...member, user_id: '7' }])
     await expect(listMembers(request, '12')).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  })
+
+  it('sends the item version as If-Match when given', async () => {
+    const request = vi.fn().mockResolvedValue(item)
+    await updateItineraryItem(request, '12', 9, { title: 'Temple' }, 2)
+    expect(new Headers(request.mock.calls[0][1].headers).get('If-Match')).toBe('"2"')
   })
 })

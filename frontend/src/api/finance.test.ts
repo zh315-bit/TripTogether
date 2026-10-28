@@ -4,7 +4,7 @@ import { createExpense, deleteExpense, getBalance, listExpenses, updateExpense }
 const expense = {
   id: 1, trip_id: 12, description: 'Dinner', amount: '100.00', currency: 'USD',
   paid_by_user_id: 1, expense_date: '2026-09-20', created_by_user_id: 1,
-  created_at: '2026-09-20T00:00:00Z', updated_at: '2026-09-20T00:00:00Z',
+  created_at: '2026-09-20T00:00:00Z', version: 1, updated_at: '2026-09-20T00:00:00Z',
   splits: [{ user_id: 1, share_amount: '50.00' }, { user_id: 2, share_amount: '50.00' }],
 }
 const balance = {
@@ -48,5 +48,11 @@ describe('finance API adapters', () => {
       ...balance,
       members: [{ ...balance.members[0], balance: '50' }],
     }), '12')).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  })
+
+  it('sends the expense version as If-Match when given', async () => {
+    const request = vi.fn().mockResolvedValue(expense)
+    await updateExpense(request, '12', 3, payload, 5)
+    expect(new Headers(request.mock.calls[0][1].headers).get('If-Match')).toBe('"5"')
   })
 })

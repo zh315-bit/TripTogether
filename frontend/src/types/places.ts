@@ -9,6 +9,7 @@ export type TripPlace = {
   provider: string
   provider_place_id: string | null
   note: string | null
+  version: number
   created_at: string
   updated_at: string
 }

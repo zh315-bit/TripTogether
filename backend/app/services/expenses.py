@@ -8,7 +8,9 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.models import Expense, ExpenseSplit, Trip, TripMember
 from app.schemas.expense import ExpenseCreate, ExpenseResponse, ExpenseUpdate
+from app.realtime import TripEvent, stage
 from app.services.trips import get_accessible_trip
+from app.services.versioning import require_version
 
 
 class ExpenseNotFoundError(Exception):
@@ -121,16 +123,19 @@ def create_expense(
         db.add(expense)
         db.flush()
         result = ExpenseResponse.model_validate(expense)
+        stage(db, TripEvent(trip_id, "expense", "created", user_id, expense.id, expense.version))
         db.commit()
         return result
 
 
 def update_expense(
     db: Session, trip_id: int, user_id: int, expense_id: int, payload: ExpenseUpdate,
+    expected_version: Optional[int] = None,
 ) -> ExpenseResponse:
     trip = get_accessible_trip(db, trip_id, user_id, for_update=True)
     with expense_errors(db):
         expense = find_expense(db, trip_id, expense_id)
+        require_version(expense, expected_version)
         changes = payload.model_dump(exclude_unset=True)
         old_participants = [split.user_id for split in expense.splits]
         participants = changes.pop("participant_user_ids", old_participants)
@@ -148,6 +153,7 @@ def update_expense(
             expense.splits = make_splits(amount, participants)
         db.flush()
         result = ExpenseResponse.model_validate(expense)
+        stage(db, TripEvent(trip_id, "expense", "updated", user_id, expense.id, expense.version))
         db.commit()
         return result
 
@@ -157,4 +163,5 @@ def delete_expense(db: Session, trip_id: int, user_id: int, expense_id: int) -> 
     with expense_errors(db):
         expense = find_expense(db, trip_id, expense_id)
         db.delete(expense)
+        stage(db, TripEvent(trip_id, "expense", "deleted", user_id, expense_id))
         db.commit()

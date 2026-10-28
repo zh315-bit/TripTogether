@@ -7,7 +7,7 @@ import { TOKEN_KEY } from '../auth/tokenStorage'
 const user = { id: 7, username: 'reader', email: 'reader@example.com', created_at: '2026-09-20T00:00:00Z' }
 const trip = {
   id: 12, name: 'Tokyo', destination: 'Japan', start_date: '2027-06-10', end_date: '2027-06-15',
-  owner_id: 7, created_at: '2026-09-20T00:00:00Z', updated_at: '2026-09-20T00:00:00Z',
+  owner_id: 7, created_at: '2026-09-20T00:00:00Z', version: 1, updated_at: '2026-09-20T00:00:00Z',
 }
 const member = {
   user_id: 8, username: 'friend', email: 'friend@example.com', role: 'member',
@@ -17,7 +17,7 @@ const item = {
   id: 9, trip_id: 12, title: 'Temple', location: 'Asakusa', date: '2027-06-10',
   start_time: '09:30:00', end_time: null, notes: null, place_id: null, position: 1,
   created_by_user_id: 7,
-  created_at: '2026-09-20T00:00:00Z', updated_at: '2026-09-20T00:00:00Z',
+  created_at: '2026-09-20T00:00:00Z', version: 1, updated_at: '2026-09-20T00:00:00Z',
 }
 const invitation = {
   id: 4, trip_id: 12, inviter_id: 8, invitee_id: 7, status: 'pending',
@@ -151,10 +151,10 @@ describe('collaboration and itinerary UI', () => {
     const places = [
       { id: 1, trip_id: 12, proposed_by_user_id: 7, name: 'Senso-ji', address: null, latitude: 35.7,
         longitude: 139.8, provider: 'manual', provider_place_id: null, note: null,
-        created_at: item.created_at, updated_at: item.created_at },
+        created_at: item.created_at, version: 1, updated_at: item.created_at },
       { id: 2, trip_id: 12, proposed_by_user_id: 8, name: 'Tokyo Tower', address: null, latitude: 35.6,
         longitude: 139.7, provider: 'manual', provider_place_id: null, note: null,
-        created_at: item.created_at, updated_at: item.created_at },
+        created_at: item.created_at, version: 1, updated_at: item.created_at },
     ]
     const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
       const method = init?.method ?? 'GET'

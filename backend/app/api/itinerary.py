@@ -1,10 +1,10 @@
 from contextlib import contextmanager
-from typing import Iterator
+from typing import Iterator, Optional
 
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_current_user
+from app.api.dependencies import etag, get_current_user, if_match_version
 from app.api.errors import APIError, APIErrorResponse
 from app.api.trips import TripID, trip_http_errors
 from app.db.session import get_db
@@ -19,8 +19,8 @@ from app.services import itinerary
 
 router = APIRouter(prefix="/trips/{trip_id}/itinerary", tags=["itinerary"], responses={
     401: {"model": APIErrorResponse}, 404: {"model": APIErrorResponse},
-    409: {"model": APIErrorResponse}, 422: {"model": APIErrorResponse},
-    503: {"model": APIErrorResponse},
+    409: {"model": APIErrorResponse}, 412: {"model": APIErrorResponse},
+    422: {"model": APIErrorResponse}, 503: {"model": APIErrorResponse},
 })
 # Versioned-only routes. main.py includes this before `router`, so the literal
 # /route path is matched before GET /{item_id} would reject it as a non-integer.
@@ -81,22 +81,27 @@ def reorder(
 
 @router.get("/{item_id}", response_model=ItineraryItemResponse)
 def detail(
-    trip_id: TripID, item_id: TripID,
+    trip_id: TripID, item_id: TripID, response: Response,
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db),
 ) -> ItineraryItemResponse:
     with itinerary_http_errors():
-        return ItineraryItemResponse.model_validate(
+        item = ItineraryItemResponse.model_validate(
             itinerary.get_item(db, trip_id, current_user.id, item_id))
+    response.headers["ETag"] = etag(item.version)
+    return item
 
 
 @router.patch("/{item_id}", response_model=ItineraryItemResponse)
 def update(
-    trip_id: TripID, item_id: TripID, payload: ItineraryItemUpdate,
+    trip_id: TripID, item_id: TripID, payload: ItineraryItemUpdate, response: Response,
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db),
+    expected_version: Optional[int] = Depends(if_match_version),
 ) -> ItineraryItemResponse:
     with itinerary_http_errors():
-        return ItineraryItemResponse.model_validate(
-            itinerary.update_item(db, trip_id, current_user.id, item_id, payload))
+        item = ItineraryItemResponse.model_validate(
+            itinerary.update_item(db, trip_id, current_user.id, item_id, payload, expected_version))
+    response.headers["ETag"] = etag(item.version)
+    return item
 
 
 @router.delete("/{item_id}", status_code=204)

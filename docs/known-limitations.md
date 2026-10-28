@@ -24,8 +24,14 @@ a claim that the service is production secure or feature complete.
 
 ## Collaboration and Money
 
-- No live push, WebSocket, offline sync, version/ETag conflict detection or
-  idempotency keys. Same-field writes are Last Write Wins.
+- Live updates are Server-Sent Events fanned out by an in-process broker:
+  correct for one API instance, not across several (that needs PostgreSQL
+  LISTEN/NOTIFY or Redis behind the same interface). Events say *what*
+  changed, not the new values; clients refetch. A slow consumer gets one
+  `resync` instead of the backlog. No offline sync or idempotency keys.
+- Conflict detection is opt-in per request: a PATCH without `If-Match` is
+  still Last Write Wins. Versions are per row; a reorder bumps the versions of
+  the moved items. Deletes do not check `If-Match`.
 - No member removal/leave/ownership transfer. Historical expense identity needs
   a deliberate design before adding those flows.
 - Invitations target existing registered users; no public code/link or email

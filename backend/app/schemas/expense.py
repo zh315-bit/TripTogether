@@ -97,6 +97,7 @@ class ExpenseResponse(BaseModel):
     paid_by_user_id: int
     expense_date: date
     created_by_user_id: int
+    version: int
     created_at: datetime
     updated_at: datetime
     splits: list[ExpenseSplitResponse]

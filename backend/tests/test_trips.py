@@ -45,7 +45,7 @@ def test_full_lifecycle_and_list_isolation(actors):
     })
     assert created.status_code == 201
     trip = created.json()
-    assert set(trip) == set(PAYLOAD) | {"id", "owner_id", "created_at", "updated_at"}
+    assert set(trip) == set(PAYLOAD) | {"id", "owner_id", "version", "created_at", "updated_at"}
     assert trip["name"] == "Japan Trip" and trip["destination"] == "Tokyo, Japan"
     assert trip["owner_id"] == alice["id"]
     path = f"/trips/{trip['id']}"

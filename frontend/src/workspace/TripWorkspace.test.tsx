@@ -26,7 +26,7 @@ const stamp = '2026-09-20T00:00:00Z'
 const user = { id: 7, username: 'reader', email: 'reader@example.com', created_at: stamp }
 const trip = {
   id: 12, name: 'Tokyo', destination: 'Japan', start_date: '2027-06-10', end_date: '2027-06-12',
-  owner_id: 7, created_at: stamp, updated_at: stamp,
+  owner_id: 7, created_at: stamp, version: 1, updated_at: stamp,
 }
 const members = [
   { user_id: 7, username: 'reader', email: 'reader@example.com', role: 'owner', joined_at: stamp },
@@ -34,11 +34,11 @@ const members = [
 ]
 const place = (id: number, name: string, proposer: number, extra = {}) => ({
   id, trip_id: 12, proposed_by_user_id: proposer, name, address: null, latitude: 35.7, longitude: 139.7 + id / 100,
-  provider: 'manual', provider_place_id: null, note: null, created_at: stamp, updated_at: stamp, ...extra,
+  provider: 'manual', provider_place_id: null, note: null, created_at: stamp, version: 1, updated_at: stamp, ...extra,
 })
 const item = (id: number, title: string, position: number, placeId: number | null, startTime: string | null = null) => ({
   id, trip_id: 12, title, location: null, date: '2027-06-10', start_time: startTime, end_time: null, notes: null,
-  place_id: placeId, position, created_by_user_id: 7, created_at: stamp, updated_at: stamp,
+  place_id: placeId, position, created_by_user_id: 7, created_at: stamp, version: 1, updated_at: stamp,
 })
 const stop = (itemId: number, placeId: number, name: string, longitude: number) => ({
   item_id: itemId, place_id: placeId, name, latitude: 35.7, longitude,
@@ -64,11 +64,28 @@ const error = (code: string, message: string, status: number, details: unknown[]
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
 
 type Handler = (url: URL, init: RequestInit) => Response | Promise<Response> | undefined
+type Live = { push: (text: string) => void; close: () => void }
+
+/** The trip's event stream: stays open, and tests push server-sent events through `state.live`. */
+function eventStream(state: { live: Live | null }) {
+  const encoder = new TextEncoder()
+  return new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      state.live = { push: (text) => controller.enqueue(encoder.encode(text)), close: () => controller.close() }
+      state.live.push('event: ready\ndata: {"trip_id":12,"user_id":7}\n\n')
+    },
+  }), { headers: { 'Content-Type': 'text/event-stream' } })
+}
+
+function emit(state: { live: Live | null }, type: string, fields: Record<string, unknown>) {
+  act(() => state.live!.push(`event: ${type}\ndata: ${JSON.stringify({ type, trip_id: 12, ...fields })}\n\n`))
+}
 
 function server(handler: Handler = () => undefined) {
   const state = {
     places: [place(1, 'Senso-ji', 8), place(2, 'Tower', 7)],
     items: [item(9, 'Temple', 1, 1), item(10, 'Lunch', 2, null, '12:00:00'), item(11, 'Tower visit', 3, 2), item(13, 'Park walk', 4, 3)],
+    live: null as Live | null,
   }
   const fetcher = vi.fn(async (input: string, init: RequestInit = {}) => {
     const url = new URL(input)
@@ -88,6 +105,7 @@ function server(handler: Handler = () => undefined) {
     }
     if (url.pathname.endsWith('/itinerary') && method === 'GET') return json(state.items)
     if (url.pathname.endsWith('/itinerary/route')) return json(route)
+    if (url.pathname.endsWith('/events')) return eventStream(state)
     return json([])
   })
   return { fetcher, state }
@@ -489,5 +507,67 @@ describe('day route panel anchors', () => {
     expect([...current.querySelectorAll('li')].map((li) => li.textContent)).toEqual([
       'HotelFixed · start', 'Dinner bookingFixed · timed', 'RestFixed · no place',
     ])
+  })
+
+  it('reloads what another member changed, says who did it, and leaves a deleted trip', async () => {
+    const { fetcher, state } = server()
+    await openMap(fetcher, 'Itinerary')
+    expect(await screen.findByText('Live')).toBeInTheDocument()
+    const itineraryLoads = () => calls(fetcher, '/api/v1/trips/12/itinerary').length
+    const placeLoads = () => calls(fetcher, '/api/v1/trips/12/places').length
+    const before = { itinerary: itineraryLoads(), places: placeLoads() }
+
+    state.items = [...state.items, item(14, 'Night market', 5, null)]
+    emit(state, 'itinerary.created', { entity: 'itinerary', action: 'created', actor_id: 8, entity_id: 14, version: 1, date: '2027-06-10' })
+    expect(await screen.findByText('friend added an itinerary item.')).toBeInTheDocument()
+    expect(await screen.findByText('Night market')).toBeInTheDocument()
+    await waitFor(() => expect(itineraryLoads()).toBeGreaterThan(before.itinerary))
+    // The list stayed on screen while it reloaded: no "Loading itinerary..." flash.
+    expect(screen.queryByText('Loading itinerary...')).not.toBeInTheDocument()
+
+    emit(state, 'place.updated', { entity: 'place', action: 'updated', actor_id: 8, entity_id: 1, version: 2 })
+    expect(await screen.findByText('friend changed a place.')).toBeInTheDocument()
+    await waitFor(() => expect(placeLoads()).toBeGreaterThan(before.places))
+
+    // The signed-in member's own changes refresh quietly, without a notice.
+    emit(state, 'expense.created', { entity: 'expense', action: 'created', actor_id: 7, entity_id: 3, version: 1 })
+    expect(screen.queryByText(/reader added/)).not.toBeInTheDocument()
+
+    emit(state, 'trip.deleted', { entity: 'trip', action: 'deleted', actor_id: 8, entity_id: 12 })
+    expect(await screen.findByText('Where to first?')).toBeInTheDocument()
+  })
+
+  it('reconnects after the server closes the stream and refetches everything', async () => {
+    const { fetcher, state } = server()
+    await openMap(fetcher)
+    expect(await screen.findByText('Live')).toBeInTheDocument()
+    const streams = () => fetcher.mock.calls.filter(([url]) => String(url).endsWith('/events')).length
+    const placeLoads = () => calls(fetcher, '/api/v1/trips/12/places').length
+    const before = placeLoads()
+    act(() => state.live!.close())
+    expect(await screen.findByText('Reconnecting…')).toBeInTheDocument()
+    await waitFor(() => expect(streams()).toBe(2), { timeout: 3000 })
+    // The fresh `ready` means changes may have been missed: every list reloads.
+    await waitFor(() => expect(placeLoads()).toBeGreaterThan(before))
+    expect(await screen.findByText('Live')).toBeInTheDocument()
+  })
+
+  it('sends the item version with an edit and loads the newer item instead of overwriting it', async () => {
+    const { fetcher, state } = server((url, init) => url.pathname === '/api/v1/trips/12/itinerary/10' && init.method === 'PATCH'
+      ? error('STALE_VERSION', 'Another member changed this first; reload and retry', 412) : undefined)
+    await openMap(fetcher, 'Itinerary')
+    // The title also appears in the route panel's anchor list; the editable row is an article.
+    const row = screen.getAllByText('Lunch').map((node) => node.closest('article')).find(Boolean)!
+    await userEvent.click(within(row).getByRole('button', { name: 'Edit' }))
+    const title = screen.getByLabelText('Title')
+    await userEvent.clear(title)
+    await userEvent.type(title, 'Brunch')
+    state.items = state.items.map((entry) => entry.id === 10 ? { ...entry, title: 'Late lunch', version: 2 } : entry)
+    await userEvent.click(screen.getByRole('button', { name: 'Save item' }))
+    expect(await screen.findByText(/changed by another member while you were editing/)).toBeInTheDocument()
+    const patch = calls(fetcher, '/api/v1/trips/12/itinerary/10', 'PATCH')[0]
+    expect(new Headers((patch[1] as RequestInit).headers).get('If-Match')).toBe('"1"')
+    expect((await screen.findAllByText('Late lunch')).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Save item' })).not.toBeInTheDocument()
   })
 })

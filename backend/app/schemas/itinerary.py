@@ -113,6 +113,7 @@ class ItineraryItemResponse(BaseModel):
     place_id: Optional[int]
     position: int
     created_by_user_id: int
+    version: int
     created_at: datetime
     updated_at: datetime
 

@@ -13,7 +13,7 @@ PREFIX = "/api/v1"
 PLACE = {"name": " Senso-ji ", "latitude": 35.7148, "longitude": 139.7967}
 FIELDS = {
     "id", "trip_id", "proposed_by_user_id", "name", "address", "latitude", "longitude",
-    "provider", "provider_place_id", "note", "created_at", "updated_at",
+    "provider", "provider_place_id", "note", "version", "created_at", "updated_at",
 }
 
 

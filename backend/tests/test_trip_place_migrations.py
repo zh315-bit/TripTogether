@@ -47,7 +47,7 @@ def test_place_metadata():
     table = TripPlace.__table__
     assert set(table.c.keys()) == {
         "id", "trip_id", "proposed_by_user_id", "name", "address", "latitude", "longitude",
-        "provider", "provider_place_id", "note", "created_at", "updated_at",
+        "provider", "provider_place_id", "note", "version", "created_at", "updated_at",
     }
     assert table.c.id.identity is not None
     assert {c.name for c in table.c if c.nullable} == {"address", "provider_place_id", "note"}
@@ -263,12 +263,12 @@ def test_0006_round_trip_preserves_legacy_data(migrated_database, place_values):
         "VALUES (:trip_id, :title, :location, :date, :position, :created_by_user_id)"
     ), item_values(conn, place_values["trip_id"]))
     old_item = dict(conn.execute(text("SELECT * FROM itinerary_items")).mappings().one())
-    old_trip = conn.execute(select(Trip.__table__)).one()
+    old_trip = conn.execute(text("SELECT * FROM trips")).one()
     old_user = conn.execute(select(User.__table__)).one()
     command.upgrade(config, "head")
-    assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0007"
+    assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0008"
     assert dict(conn.execute(text("SELECT * FROM itinerary_items")).mappings().one()) == {
-        **old_item, "place_id": None,
+        **old_item, "place_id": None, "version": 1,
     }
     command.check(config)
     with Session(bind=conn, join_transaction_mode="create_savepoint") as db:
@@ -293,7 +293,7 @@ def test_0006_round_trip_preserves_legacy_data(migrated_database, place_values):
     assert "place_id" not in {c["name"] for c in inspect(conn).get_columns("itinerary_items")}
     assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0005"
     assert dict(conn.execute(text("SELECT * FROM itinerary_items")).mappings().one()) == old_item
-    assert conn.execute(select(Trip.__table__)).one() == old_trip
+    assert conn.execute(text("SELECT * FROM trips")).one() == old_trip
     assert conn.execute(select(User.__table__)).one() == old_user
     command.upgrade(config, "head")
     command.check(config)

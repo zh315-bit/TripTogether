@@ -5,6 +5,8 @@ export type Trip = {
   start_date: string
   end_date: string
   owner_id: number
+  /** Entity version for If-Match; the server increments it on every change. */
+  version: number
   created_at: string
   updated_at: string
 }

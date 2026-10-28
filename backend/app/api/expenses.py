@@ -1,10 +1,10 @@
 from contextlib import contextmanager
-from typing import Iterator
+from typing import Iterator, Optional
 
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_current_user
+from app.api.dependencies import etag, get_current_user, if_match_version
 from app.api.errors import APIError, APIErrorResponse
 from app.api.trips import TripID, trip_http_errors
 from app.db.session import get_db
@@ -15,8 +15,8 @@ from app.services import expenses
 
 router = APIRouter(prefix="/trips/{trip_id}/expenses", tags=["expenses"], responses={
     401: {"model": APIErrorResponse}, 404: {"model": APIErrorResponse},
-    409: {"model": APIErrorResponse}, 422: {"model": APIErrorResponse},
-    503: {"model": APIErrorResponse},
+    409: {"model": APIErrorResponse}, 412: {"model": APIErrorResponse},
+    422: {"model": APIErrorResponse}, 503: {"model": APIErrorResponse},
 })
 
 
@@ -58,20 +58,26 @@ def collection(
 
 @router.get("/{expense_id}", response_model=ExpenseResponse)
 def detail(
-    trip_id: TripID, expense_id: TripID,
+    trip_id: TripID, expense_id: TripID, response: Response,
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db),
 ) -> ExpenseResponse:
     with expense_http_errors():
-        return expenses.get_expense(db, trip_id, current_user.id, expense_id)
+        expense = expenses.get_expense(db, trip_id, current_user.id, expense_id)
+    response.headers["ETag"] = etag(expense.version)
+    return expense
 
 
 @router.patch("/{expense_id}", response_model=ExpenseResponse)
 def update(
-    trip_id: TripID, expense_id: TripID, payload: ExpenseUpdate,
+    trip_id: TripID, expense_id: TripID, payload: ExpenseUpdate, response: Response,
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db),
+    expected_version: Optional[int] = Depends(if_match_version),
 ) -> ExpenseResponse:
     with expense_http_errors():
-        return expenses.update_expense(db, trip_id, current_user.id, expense_id, payload)
+        expense = expenses.update_expense(
+            db, trip_id, current_user.id, expense_id, payload, expected_version)
+    response.headers["ETag"] = etag(expense.version)
+    return expense
 
 
 @router.delete("/{expense_id}", status_code=204)

@@ -1,6 +1,9 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import type { LiveStatus, TripEvent } from '../api/events'
+import { getTrip } from '../api/trips'
+import { useAuth } from '../auth/AuthContext'
 import { BalancePanel } from '../components/BalancePanel'
 import { ExpensePanel } from '../components/ExpensePanel'
 import { FinanceSummary } from '../components/FinanceSummary'
@@ -20,6 +23,7 @@ import { memberStyle } from '../utils/memberColors'
 import { Icon } from './Icon'
 import type { IconName } from './Icon'
 import { TripSettings } from './TripSettings'
+import { useTripEvents } from './useTripEvents'
 import '../components/map/MapPanel.css'
 import './TripWorkspace.css'
 
@@ -36,6 +40,27 @@ type Sheet = 'peek' | 'half' | 'full'
 
 const isPanel = (value: string | null): value is PanelId => PANELS.some((panel) => panel.id === value)
 
+const LIVE_LABEL: Record<LiveStatus, string> = {
+  connecting: 'Connecting live updates…', live: 'Live', reconnecting: 'Reconnecting…', offline: 'Live updates off',
+}
+
+const VERB: Record<string, string> = { created: 'added', updated: 'changed', deleted: 'removed' }
+
+/** One line about another member's change, for the activity notice. */
+function describe(event: TripEvent, who: string): string | null {
+  const verb = VERB[event.action ?? ''] ?? 'changed'
+  switch (event.entity) {
+    case 'itinerary':
+      return event.action === 'reordered' ? `${who} reordered the itinerary for ${event.date}.`
+        : `${who} ${verb} an itinerary item.`
+    case 'place': return `${who} ${verb} a place.`
+    case 'expense': return `${who} ${verb} an expense.`
+    case 'member': return `${who} joined the trip.`
+    case 'trip': return event.action === 'deleted' ? null : `${who} changed the trip details.`
+    default: return null
+  }
+}
+
 type Props = {
   trip: Trip
   owner: boolean
@@ -50,11 +75,49 @@ type Props = {
  */
 export default function TripWorkspace({ trip, owner, onTripUpdated, onTripDeleted }: Props) {
   const map = useTripMap(trip)
+  const { state, request } = useAuth()
   const [params, setParams] = useSearchParams()
   const requested = params.get('panel')
   const panel: PanelId = isPanel(requested) ? requested : 'places'
   const [sheet, setSheet] = useState<Sheet>('peek')
   const [balanceKey, setBalanceKey] = useState(0)
+  const [expenseKey, setExpenseKey] = useState(0)
+  const [memberKey, setMemberKey] = useState(0)
+  const [activity, setActivity] = useState('')
+  const tripId = String(trip.id)
+  const me = state.user?.id
+
+  // Other members' changes arrive as events; each one refetches the affected list,
+  // so what is shown is always the server's committed state, never a guessed diff.
+  const live = useTripEvents(tripId, (event) => {
+    const bumpFinance = () => { setBalanceKey((key) => key + 1); setExpenseKey((key) => key + 1) }
+    switch (event.entity) {
+      case 'itinerary': void map.syncItinerary(); break
+      case 'place': void map.reloadPlaces(); break
+      case 'expense': bumpFinance(); break
+      case 'member': void map.reloadMembers(); setMemberKey((key) => key + 1); break
+      case 'trip':
+        if (event.action === 'deleted') { onTripDeleted(trip.id); return }
+        getTrip(request, tripId).then(onTripUpdated, () => undefined)
+        break
+      default:
+        if (event.type === 'resync') {
+          void map.load()
+          bumpFinance()
+          setMemberKey((key) => key + 1)
+        }
+    }
+    if (event.actor_id === undefined || event.actor_id === me) return
+    const who = map.members.find((member) => member.user_id === event.actor_id)?.username ?? 'Another member'
+    const text = describe(event, who)
+    if (text) setActivity(text)
+  })
+
+  useEffect(() => {
+    if (!activity) return
+    const timer = setTimeout(() => setActivity(''), 6000)
+    return () => clearTimeout(timer)
+  }, [activity])
   const tabs = useRef<(HTMLButtonElement | null)[]>([])
   const { selectPlace } = map
   // On phones the sheet drops to its peek height so the map and the detail card show.
@@ -103,6 +166,10 @@ export default function TripWorkspace({ trip, owner, onTripUpdated, onTripDelete
     <aside className={`workspace-sidebar sheet-${sheet}`} aria-label="Trip tools">
       <button className="sheet-handle" type="button" aria-expanded={sheet !== 'peek'}
         aria-label={sheetLabel[sheet]} onClick={() => setSheet(nextSheet[sheet])}><span aria-hidden="true" /></button>
+      <div className={`live-bar is-${live}`}>
+        <span className="live-status" role="status" aria-live="polite"><span className="live-dot" aria-hidden="true" />{LIVE_LABEL[live]}</span>
+        {activity && <span className="live-activity" role="status">{activity}</span>}
+      </div>
       <div className="panel-tabs" role="tablist" aria-label="Trip tools" onKeyDown={onTabKey}>
         {PANELS.map((item, index) => <button key={item.id} ref={(node) => { tabs.current[index] = node }}
           id={`panel-tab-${item.id}`} type="button" role="tab" aria-selected={panel === item.id}
@@ -139,10 +206,10 @@ export default function TripWorkspace({ trip, owner, onTripUpdated, onTripDelete
           </>}
           {panel === 'expenses' && <>
             <FinanceSummary tripId={String(trip.id)} refreshKey={balanceKey} onOpenBalances={() => choose('balances')} />
-            <ExpensePanel tripId={String(trip.id)} onChanged={() => setBalanceKey((key) => key + 1)} />
+            <ExpensePanel tripId={String(trip.id)} refreshKey={expenseKey} onChanged={() => setBalanceKey((key) => key + 1)} />
           </>}
           {panel === 'balances' && <BalancePanel tripId={String(trip.id)} refreshKey={balanceKey} />}
-          {panel === 'members' && <MembersPanel tripId={String(trip.id)} owner={owner} />}
+          {panel === 'members' && <MembersPanel tripId={String(trip.id)} owner={owner} refreshKey={memberKey} />}
           {panel === 'settings' && <TripSettings trip={trip} owner={owner}
             onUpdated={onTripUpdated} onDeleted={onTripDeleted} />}
         </>}
