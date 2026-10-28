@@ -3,6 +3,8 @@
 [![CI](https://github.com/zh315-bit/TripTogether/actions/workflows/ci.yml/badge.svg)](https://github.com/zh315-bit/TripTogether/actions/workflows/ci.yml)
 [![Live demo](https://img.shields.io/badge/demo-live-2ea44f)](https://trip-together-zeta.vercel.app)
 [![API](https://img.shields.io/badge/api-FastAPI-009688)](https://triptogether-api.onrender.com/health)
+[![CodeQL](https://github.com/zh315-bit/TripTogether/actions/workflows/codeql.yml/badge.svg)](https://github.com/zh315-bit/TripTogether/actions/workflows/codeql.yml)
+[![Release](https://img.shields.io/github/v/release/zh315-bit/TripTogether)](https://github.com/zh315-bit/TripTogether/releases)
 
 **Plan together, travel together, settle fairly.**
 A full-stack web app where a small group plans a trip on a shared map, keeps one itinerary, records expenses, and gets exact settlement suggestions.

@@ -53,7 +53,7 @@ async def lifespan(application: FastAPI):
 def create_app() -> FastAPI:
     settings = get_app_settings()
     application = FastAPI(
-        title="TripTogether", version="1.0.0", lifespan=lifespan,
+        title="TripTogether", version="1.2.0", lifespan=lifespan,
         description="Client API: /api/v1. Bearer JWT; decimal money strings; "
                     "uniform error envelope. Legacy paths remain compatibility aliases.",
         openapi_tags=[
