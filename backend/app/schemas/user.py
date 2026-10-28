@@ -54,6 +54,28 @@ class UserRegister(UserLogin):
 class TokenResponse(BaseModel):
     access_token: str = Field(repr=False)
     token_type: Literal["bearer"] = "bearer"
+    # Opaque, single-use: exchange it at /auth/refresh for a new pair.
+    refresh_token: str = Field(repr=False)
+
+
+class RefreshRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    refresh_token: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+
+
+class ForgotPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    email: NormalizedEmail
+
+
+class ResetPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    token: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+    password: SecretStr = Field(min_length=8, max_length=128)
+
+
+class AcceptedResponse(BaseModel):
+    status: Literal["accepted"] = "accepted"
 
 
 class UserResponse(BaseModel):

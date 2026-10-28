@@ -2,7 +2,7 @@ import { StrictMode } from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { AuthProvider, useAuth } from './AuthContext'
-import { TOKEN_KEY } from './tokenStorage'
+import { REFRESH_KEY, TOKEN_KEY } from './tokenStorage'
 
 const user = { id: 1, username: 'reader', email: 'reader@example.com', created_at: '2026-09-20T00:00:00Z' }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
@@ -65,6 +65,51 @@ describe('Auth state', () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => json(user)))
     fireEvent.click(screen.getByText('Restore'))
     expect(await screen.findByText('reader')).toBeInTheDocument()
+  })
+
+  it('renews an expired access token with the refresh token and retries once', async () => {
+    sessionStorage.setItem(TOKEN_KEY, 'expired-token')
+    sessionStorage.setItem(REFRESH_KEY, 'refresh-1')
+    const fetcher = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/auth/refresh')) {
+        expect(JSON.parse(String(init?.body))).toEqual({ refresh_token: 'refresh-1' })
+        return json({ access_token: 'fresh-token', token_type: 'bearer', refresh_token: 'refresh-2' })
+      }
+      const bearer = new Headers(init?.headers).get('Authorization')
+      return bearer === 'Bearer fresh-token' ? json(user) : denied()
+    })
+    vi.stubGlobal('fetch', fetcher)
+    mount()
+    expect(await screen.findByText('reader')).toBeInTheDocument()
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBe('fresh-token')
+    expect(sessionStorage.getItem(REFRESH_KEY)).toBe('refresh-2')
+    // Restore: me (401), refresh, me (200). StrictMode mounts twice; each pass does at most one refresh.
+    const refreshes = fetcher.mock.calls.filter(([url]) => String(url).endsWith('/auth/refresh'))
+    expect(refreshes.length).toBeGreaterThanOrEqual(1)
+    expect(sessionStorage.getItem(REFRESH_KEY)).not.toBe('refresh-1')
+  })
+
+  it('ends the session when the refresh token is rejected, and revokes it on logout', async () => {
+    sessionStorage.setItem(TOKEN_KEY, 'expired-token')
+    sessionStorage.setItem(REFRESH_KEY, 'refresh-dead')
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => denied()))
+    mount()
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('anonymous'))
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBeNull()
+    expect(sessionStorage.getItem(REFRESH_KEY)).toBeNull()
+
+    sessionStorage.setItem(TOKEN_KEY, 'opaque-test-token')
+    sessionStorage.setItem(REFRESH_KEY, 'refresh-live')
+    const fetcher = vi.fn().mockImplementation(async (url: string) =>
+      String(url).endsWith('/auth/logout') ? new Response(null, { status: 204 }) : json(user))
+    vi.stubGlobal('fetch', fetcher)
+    fireEvent.click(screen.getByText('Restore'))
+    expect(await screen.findByText('reader')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Exit'))
+    expect(screen.getByRole('status')).toHaveTextContent('anonymous')
+    const revoked = fetcher.mock.calls.find(([url]) => String(url).endsWith('/auth/logout'))
+    expect(JSON.parse(String((revoked?.[1] as RequestInit).body))).toEqual({ refresh_token: 'refresh-live' })
+    expect(sessionStorage.getItem(REFRESH_KEY)).toBeNull()
   })
 
   it('clears the session on a subsequent authenticated request 401', async () => {

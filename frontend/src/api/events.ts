@@ -4,7 +4,7 @@ import { ApiError } from './client'
 export type TripEvent = {
   type: string
   trip_id?: number
-  entity?: 'trip' | 'itinerary' | 'expense' | 'place' | 'member'
+  entity?: 'trip' | 'itinerary' | 'expense' | 'place' | 'member' | 'settlement'
   action?: 'created' | 'updated' | 'deleted' | 'reordered' | 'joined'
   actor_id?: number
   entity_id?: number
