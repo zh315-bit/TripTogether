@@ -3,7 +3,7 @@ import tseslint from 'typescript-eslint'
 import hooks from 'eslint-plugin-react-hooks'
 
 export default [
-  { ignores: ['dist/**', 'coverage/**', '**/._*'] },
+  { ignores: ['dist/**', 'coverage/**', 'playwright-report/**', 'test-results/**', '**/._*'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

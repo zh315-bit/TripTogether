@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import type { LiveStatus, TripEvent } from '../api/events'
+import type { TripMember } from '../types/collaboration'
 import { getTrip } from '../api/trips'
 import { useAuth } from '../auth/AuthContext'
 import { BalancePanel } from '../components/BalancePanel'
@@ -91,11 +92,21 @@ export default function TripWorkspace({ trip, owner, onTripUpdated, onTripDelete
   // so what is shown is always the server's committed state, never a guessed diff.
   const live = useTripEvents(tripId, (event) => {
     const bumpFinance = () => { setBalanceKey((key) => key + 1); setExpenseKey((key) => key + 1) }
+    const notify = (members: TripMember[]) => {
+      if (event.actor_id === undefined || event.actor_id === me) return
+      const who = members.find((member) => member.user_id === event.actor_id)?.username ?? 'Another member'
+      const text = describe(event, who)
+      if (text) setActivity(text)
+    }
     switch (event.entity) {
       case 'itinerary': void map.syncItinerary(); break
       case 'place': void map.reloadPlaces(); break
       case 'expense': bumpFinance(); break
-      case 'member': void map.reloadMembers(); setMemberKey((key) => key + 1); break
+      case 'member':
+        // The actor may be the new member, so name them from the refreshed list.
+        setMemberKey((key) => key + 1)
+        void map.reloadMembers().then(notify)
+        return
       case 'trip':
         if (event.action === 'deleted') { onTripDeleted(trip.id); return }
         getTrip(request, tripId).then(onTripUpdated, () => undefined)
@@ -107,10 +118,7 @@ export default function TripWorkspace({ trip, owner, onTripUpdated, onTripDelete
           setMemberKey((key) => key + 1)
         }
     }
-    if (event.actor_id === undefined || event.actor_id === me) return
-    const who = map.members.find((member) => member.user_id === event.actor_id)?.username ?? 'Another member'
-    const text = describe(event, who)
-    if (text) setActivity(text)
+    notify(map.members)
   })
 
   useEffect(() => {

@@ -19,7 +19,9 @@ npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
 | `npm run dev` | Vite dev server with HMR |
 | `npm test` | Vitest + Testing Library (jsdom) |
 | `npm run lint` | ESLint with zero warnings allowed |
-| `npm run typecheck` | `tsc -b` across app and node configs |
+| `npm run typecheck` | `tsc -b` across app, node and e2e configs |
+| `npm run e2e` | Playwright end-to-end tests; starts the backend (8011) and Vite (5175) itself |
+| `npm run e2e:ui` | The same suite in Playwright's interactive UI |
 | `npm run build` | Type-check then produce `dist/` |
 | `npm run preview` | Serve the production build locally |
 
@@ -35,6 +37,7 @@ src/
   types/        contracts mirroring backend schemas
   utils/        formatting helpers
   test/         test setup
+e2e/            Playwright specs and API helpers (support.ts); config in playwright.config.ts
 ```
 
 ## Configuration
