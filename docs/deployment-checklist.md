@@ -18,6 +18,7 @@ credential, account, or deployment command that creates cloud resources.
 | `RATE_LIMIT_REGISTER` | No | Optional | No | `5/60` (default) or `off` |
 | `TRUST_PROXY_HEADERS` | No | Optional | No | default `1` in production: client address from `X-Forwarded-For` |
 | `LOG_FORMAT` | No | Optional | No | default `json` in production, `text` otherwise |
+| `DEMO_MODE` | No | Optional | No | `1` enables `POST /auth/demo` and the landing page's **Try the demo**; the seeded trip rebuilds every 6 h |
 | `GEOCODER_PROVIDER` | No | Optional | No | `disabled` (default) or `nominatim` |
 | `GEOCODER_USER_AGENT` | No | Required if `nominatim` | No | `TripTogether/1.0 (contact: ops@<your-domain>)` |
 | `GEOCODER_BASE_URL` | No | Optional | No | default `https://nominatim.openstreetmap.org` |

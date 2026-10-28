@@ -14,6 +14,9 @@ a claim that the service is production secure or feature complete.
 - Registration duplicate errors and inviting registered emails disclose account
   existence. Login uses one generic credential error and dummy hash verification,
   but this is not a formal constant-time or enumeration-proof guarantee.
+- The demo trip is shared by every visitor and rebuilt every six hours (or by
+  `scripts/reset_demo.py`); two visitors at once see each other's edits, which
+  is the point, but there is no per-visitor sandbox.
 - Rate limiting covers login and registration only, as a fixed window per
   client address (burstier than a token bucket; up to 2x the rule at a window
   edge). Behind a proxy it trusts the first `X-Forwarded-For` address, which

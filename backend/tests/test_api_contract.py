@@ -44,8 +44,8 @@ def test_openapi_is_complete_and_unique():
         assert client.get("/docs").status_code == 200
     operations = [(path, method, operation) for path, methods in spec["paths"].items()
                   for method, operation in methods.items()]
-    assert len(operations) == 36
-    assert sum(path.startswith(PREFIX + "/") for path, _, _ in operations) == 34
+    assert len(operations) == 37
+    assert sum(path.startswith(PREFIX + "/") for path, _, _ in operations) == 35
     ids = [op["operationId"] for _, _, op in operations]
     assert len(ids) == len(set(ids))
     assert set(spec["paths"]) >= {
@@ -73,7 +73,9 @@ def test_openapi_is_complete_and_unique():
                 )
         if method == "delete":
             assert "content" not in op["responses"]["204"]
-        if path.startswith(PREFIX) and path not in (PREFIX + "/auth/register", PREFIX + "/auth/login"):
+        if path.startswith(PREFIX) and path not in (
+            PREFIX + "/auth/register", PREFIX + "/auth/login", PREFIX + "/auth/demo",
+        ):
             assert op["security"] == [{"BearerAuth": []}]
     for route in app.routes:
         if isinstance(route, APIRoute) and route.include_in_schema:

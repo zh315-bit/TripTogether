@@ -1,6 +1,8 @@
 import { ApiError } from '../api/client'
 
 export const TOKEN_KEY = 'triptogether.accessToken'
+/** Which demo member this tab is signed in as, so the workspace can offer the others. */
+export const DEMO_KEY = 'triptogether.demoMember'
 
 export const tokenStorage = {
   read(): string | null {

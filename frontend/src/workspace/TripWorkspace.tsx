@@ -25,6 +25,9 @@ import { Icon } from './Icon'
 import type { IconName } from './Icon'
 import { TripSettings } from './TripSettings'
 import { useTripEvents } from './useTripEvents'
+import { DEMO_KEY } from '../auth/tokenStorage'
+import { DEMO_MEMBERS, DEMO_NAMES } from '../pages/DemoPage'
+import type { DemoMember } from '../types/auth'
 import '../components/map/MapPanel.css'
 import './TripWorkspace.css'
 
@@ -40,6 +43,15 @@ type PanelId = (typeof PANELS)[number]['id']
 type Sheet = 'peek' | 'half' | 'full'
 
 const isPanel = (value: string | null): value is PanelId => PANELS.some((panel) => panel.id === value)
+
+function readDemoMember(): DemoMember | null {
+  try {
+    const value = sessionStorage.getItem(DEMO_KEY)
+    return (DEMO_MEMBERS as readonly string[]).includes(value ?? '') ? value as DemoMember : null
+  } catch {
+    return null
+  }
+}
 
 const LIVE_LABEL: Record<LiveStatus, string> = {
   connecting: 'Connecting live updates…', live: 'Live', reconnecting: 'Reconnecting…', offline: 'Live updates off',
@@ -85,6 +97,8 @@ export default function TripWorkspace({ trip, owner, onTripUpdated, onTripDelete
   const [expenseKey, setExpenseKey] = useState(0)
   const [memberKey, setMemberKey] = useState(0)
   const [activity, setActivity] = useState('')
+  // Set by the demo sign-in for this tab only; a second window can join as someone else.
+  const demoMember = readDemoMember()
   const tripId = String(trip.id)
   const me = state.user?.id
 
@@ -177,6 +191,10 @@ export default function TripWorkspace({ trip, owner, onTripUpdated, onTripDelete
       <div className={`live-bar is-${live}`}>
         <span className="live-status" role="status" aria-live="polite"><span className="live-dot" aria-hidden="true" />{LIVE_LABEL[live]}</span>
         {activity && <span className="live-activity" role="status">{activity}</span>}
+        {demoMember && <span className="live-demo">Demo as {DEMO_NAMES[demoMember]} ·{' '}
+          {DEMO_MEMBERS.filter((member) => member !== demoMember).map((member) =>
+            <a key={member} href={`/demo?as=${member}`} target="_blank" rel="noopener noreferrer">Open as {DEMO_NAMES[member]} ↗</a>)}
+        </span>}
       </div>
       <div className="panel-tabs" role="tablist" aria-label="Trip tools" onKeyDown={onTabKey}>
         {PANELS.map((item, index) => <button key={item.id} ref={(node) => { tabs.current[index] = node }}

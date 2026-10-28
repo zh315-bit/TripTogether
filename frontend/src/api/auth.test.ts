@@ -55,3 +55,19 @@ describe('Auth API contracts', () => {
     await expect(getCurrentUser('opaque-test-token')).rejects.toMatchObject({ status: 401, code: 'INVALID_CREDENTIALS' })
   })
 })
+
+
+describe('demo sign-in adapter', () => {
+  it('posts the member and validates the response shape', async () => {
+    const { demoLogin } = await import('./auth')
+    const good = { access_token: 'tok', token_type: 'bearer', member: 'jonas', username: 'jonas_demo', trip_id: 9 }
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(good)))
+    vi.stubGlobal('fetch', fetcher)
+    await expect(demoLogin('jonas')).resolves.toEqual(good)
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ member: 'jonas' })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...good, member: 'root' }))))
+    await expect(demoLogin('mika')).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...good, trip_id: '9' }))))
+    await expect(demoLogin('mika')).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  })
+})

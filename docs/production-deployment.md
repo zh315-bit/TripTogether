@@ -54,6 +54,7 @@ trips, memberships, itineraries, expenses, balances, and settlements.
    | `RATE_LIMIT_LOGIN` / `RATE_LIMIT_REGISTER` | optional; `10/60` and `5/60` by default, `off` to disable | No |
    | `TRUST_PROXY_HEADERS` | optional; default `1` in production so `X-Forwarded-For` names the client | No |
    | `LOG_FORMAT` | optional; `json` (default in production) or `text` | No |
+   | `DEMO_MODE` | optional; `1` enables the public demo sign-in (`POST /auth/demo`) with a self-resetting trip | No |
    | `GEOCODER_PROVIDER` | optional; `disabled` (default) or `nominatim` | No |
    | `GEOCODER_USER_AGENT` | **required when `nominatim`**: app name plus a monitored contact | No |
    | `GEOCODER_BASE_URL` | optional; default `https://nominatim.openstreetmap.org`, HTTPS only | No |

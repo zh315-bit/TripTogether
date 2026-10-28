@@ -41,6 +41,7 @@ export default defineConfig({
         // brute-force limits have their own backend tests.
         RATE_LIMIT_LOGIN: 'off',
         RATE_LIMIT_REGISTER: 'off',
+        DEMO_MODE: '1',
       },
     },
     {

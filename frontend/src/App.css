@@ -33,7 +33,7 @@ button:disabled { cursor: wait; opacity: .6; }
 .landing h1 { max-width: 570px; font-size: clamp(46px, 6vw, 76px); }
 .landing h1 em { color: var(--primary); font-family: Georgia, serif; font-weight: 500; }
 .landing-copy { max-width: 520px; margin: 24px 0 30px; font-size: 18px; }
-.landing-actions a { text-decoration: none; }
+.landing-actions a { text-decoration: none; }.landing-login { align-self: center; padding-inline: 6px; }.landing-demo-hint { max-width: 520px; margin: 14px 0 0; font-size: 14px; }.landing-demo-error { margin: 0; flex-basis: 100%; }
 .landing-values { display: grid; grid-template-columns: repeat(3, 1fr); gap: 36px; margin-top: 36px; padding-top: 34px; border-top: 1px solid var(--border); }
 .landing-values > div { display: grid; gap: 10px; }
 .value-number { color: var(--primary); font-size: 12px; font-weight: 800; letter-spacing: .08em; }

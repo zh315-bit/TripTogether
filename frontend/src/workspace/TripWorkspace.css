@@ -9,6 +9,9 @@
 .is-live .live-dot { background: var(--success); box-shadow: 0 0 0 3px rgba(22, 128, 99, .18); }
 .is-reconnecting .live-dot, .is-connecting .live-dot { background: var(--sand); }
 .is-offline .live-dot { background: var(--danger); }
+.live-demo { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; color: var(--ink-muted); font-size: 12px; font-weight: 700; }
+.live-demo a { color: var(--primary); text-decoration: none; }
+.live-demo a:hover { text-decoration: underline; }
 .live-activity { overflow: hidden; min-width: 0; padding: 2px 9px; border-radius: 999px; background: var(--primary-light); color: var(--primary-strong); font-weight: 650; text-overflow: ellipsis; white-space: nowrap; animation: live-activity-in .25s ease; }
 @keyframes live-activity-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .live-activity { animation: none; } }

@@ -45,7 +45,7 @@ is recipient identity, not a Trip role. Forbidden resources remain hidden404.
 
 ## Official Client API After Step 11
 
-36 documented operations: Auth3, Trips5, Members1, Invitations4, Itinerary8,
+37 documented operations: Auth4, Trips5, Members1, Invitations4, Itinerary8,
 Expenses5, Balances1, Places5, Geocoding1, Events1, System2. Counts are method/path pairs, not distinct URLs.
 All official success schemas retain their original fields. All listed errors
 use APIErrorResponse; generic unexpected500 and infrastructure503 can occur on
@@ -58,6 +58,7 @@ same envelope inside `/api/v1`.
 | GET | /ready | No | Public | None | 200 ReadinessResponse | 503 |
 | POST | /api/v1/auth/register | No | Public | UserRegister | 201 UserResponse | 409,422,429,503 |
 | POST | /api/v1/auth/login | No | Public | UserLogin | 200 TokenResponse | 401,422,429,503 |
+| POST | /api/v1/auth/demo | No | Public (DEMO_MODE only) | DemoLogin `{member: mika\|jonas\|aiko}` | 200 DemoTokenResponse (+ username, trip_id) | 404,422,429,503 |
 | GET | /api/v1/auth/me | JWT | Current user | None | 200 UserResponse | 401,503 |
 | POST | /api/v1/trips | JWT | Any user | TripCreate | 201 TripResponse | 401,422,503 |
 | GET | /api/v1/trips | JWT | Owned/joined only | None | 200 TripResponse[] | 401,503 |
@@ -141,13 +142,13 @@ Do not count preflight, automatic slash redirects or HEAD as new business APIs.
 | 400 | BAD_REQUEST (fallback) |
 | 401 | INVALID_CREDENTIALS |
 | 403 | FORBIDDEN (fallback; resource policy currently uses404) |
-| 404 | TRIP_NOT_FOUND, INVITATION_NOT_FOUND, INVITEE_NOT_FOUND, ITINERARY_NOT_FOUND, EXPENSE_NOT_FOUND, NOT_FOUND |
+| 404 | DEMO_DISABLED, TRIP_NOT_FOUND, INVITATION_NOT_FOUND, INVITEE_NOT_FOUND, ITINERARY_NOT_FOUND, EXPENSE_NOT_FOUND, NOT_FOUND |
 | 405 | METHOD_NOT_ALLOWED |
 | 409 | USERNAME_ALREADY_EXISTS, EMAIL_ALREADY_EXISTS, TRIP_ITINERARY_CONFLICT, INVITATION_CONFLICT, EXPENSE_CURRENCY_CONFLICT, LEDGER_INCONSISTENT |
 | 422 | VALIDATION_ERROR |
 | 429 | RATE_LIMITED (`Retry-After` seconds), GEOCODER_BUSY |
 | 500 | INTERNAL_ERROR |
-| 503 | RATE_LIMITER_UNAVAILABLE, REGISTRATION_UNAVAILABLE, AUTHENTICATION_UNAVAILABLE, TRIPS_UNAVAILABLE, INVITATIONS_UNAVAILABLE, ITINERARY_UNAVAILABLE, EXPENSES_UNAVAILABLE, BALANCES_UNAVAILABLE, DATABASE_UNAVAILABLE, NOT_READY, SERVICE_UNAVAILABLE (fallback) |
+| 503 | DEMO_UNAVAILABLE, RATE_LIMITER_UNAVAILABLE, REGISTRATION_UNAVAILABLE, AUTHENTICATION_UNAVAILABLE, TRIPS_UNAVAILABLE, INVITATIONS_UNAVAILABLE, ITINERARY_UNAVAILABLE, EXPENSES_UNAVAILABLE, BALANCES_UNAVAILABLE, DATABASE_UNAVAILABLE, NOT_READY, SERVICE_UNAVAILABLE (fallback) |
 
 Codes are assigned at business raise sites, not inferred from English strings.
 Validation uses one stable code with useful field details rather than a giant

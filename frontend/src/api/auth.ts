@@ -1,5 +1,5 @@
 import { ApiError, apiFetch } from './client'
-import type { LoginRequest, RegisterRequest, TokenResponse, User } from '../types/auth'
+import type { DemoMember, DemoTokenResponse, LoginRequest, RegisterRequest, TokenResponse, User } from '../types/auth'
 
 function parseUser(body: unknown): User {
   if (typeof body !== 'object' || body === null ||
@@ -30,6 +30,28 @@ export async function login(payload: LoginRequest, signal?: AbortSignal): Promis
     throw new ApiError(200, 'INVALID_RESPONSE', 'Unexpected sign-in response.')
   }
   return { access_token: body.access_token, token_type: body.token_type }
+}
+
+const DEMO_MEMBERS: readonly DemoMember[] = ['mika', 'jonas', 'aiko']
+
+/** A session for one of the demo members; 404 DEMO_DISABLED when the server has no demo. */
+export async function demoLogin(member: DemoMember, signal?: AbortSignal): Promise<DemoTokenResponse> {
+  const body = await apiFetch<unknown>('/api/v1/auth/demo', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ member }), signal, cache: 'no-store',
+  })
+  if (typeof body !== 'object' || body === null ||
+    !('access_token' in body) || typeof body.access_token !== 'string' || !body.access_token.trim() ||
+    !('token_type' in body) || body.token_type !== 'bearer' ||
+    !('member' in body) || !DEMO_MEMBERS.includes(body.member as DemoMember) ||
+    !('username' in body) || typeof body.username !== 'string' ||
+    !('trip_id' in body) || typeof body.trip_id !== 'number' || !Number.isInteger(body.trip_id)) {
+    throw new ApiError(200, 'INVALID_RESPONSE', 'Unexpected demo sign-in response.')
+  }
+  return {
+    access_token: body.access_token, token_type: body.token_type, member: body.member as DemoMember,
+    username: body.username, trip_id: body.trip_id,
+  }
 }
 
 export async function getCurrentUser(accessToken: string, signal?: AbortSignal): Promise<User> {
