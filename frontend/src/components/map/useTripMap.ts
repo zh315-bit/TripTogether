@@ -16,6 +16,8 @@ const ROUTE_COLOR = '#17233a'
 const SUGGESTED_COLOR = '#c2410c'
 const CONFLICT_MESSAGE =
   'This day was changed by another member. The latest itinerary has been loaded; suggest again for a fresh order.'
+const STALE_PLACE_MESSAGE =
+  'Another member changed this place first. The latest version is shown; review it and save again.'
 
 export type RoutePending = 'route' | 'suggest' | 'apply' | null
 
@@ -134,6 +136,22 @@ export function useTripMap(trip: Trip) {
     await loadRoute()
   }, [request, tripId, items, loadRoute])
 
+  /** Another member changed the itinerary: refresh the map and tell the list views. */
+  const syncItinerary = useCallback(async () => {
+    await refreshItinerary()
+    setItineraryVersion((version) => version + 1)
+  }, [refreshItinerary])
+
+  const reloadPlaces = useCallback(async () => {
+    setPlaces(await listPlaces(request, tripId).catch(() => places))
+    // Deleted or relinked places change the day's route too.
+    await loadRoute()
+  }, [request, tripId, places, loadRoute])
+
+  const reloadMembers = useCallback(async () => {
+    setMembers(await listMembers(request, tripId).catch(() => members))
+  }, [request, tripId, members])
+
   async function addResult(result: GeocodeResult): Promise<string> {
     try {
       const created = await createPlace(request, tripId, {
@@ -156,9 +174,16 @@ export function useTripMap(trip: Trip) {
   }
 
   async function update(place: TripPlace, payload: PlaceUpdate) {
-    const updated = await updatePlace(request, tripId, place.id, payload)
-    setPlaces((current) => current.map((candidate) => candidate.id === updated.id ? updated : candidate))
-    setNotice(`${updated.name} saved.`)
+    try {
+      const updated = await updatePlace(request, tripId, place.id, payload, place.version)
+      setPlaces((current) => current.map((candidate) => candidate.id === updated.id ? updated : candidate))
+      setNotice(`${updated.name} saved.`)
+    } catch (error) {
+      if (errorCode(error) !== 'STALE_VERSION') throw error
+      // Never overwrite a newer version blindly: show it and let the user decide.
+      await reloadPlaces()
+      throw new ApiError(412, 'STALE_VERSION', STALE_PLACE_MESSAGE)
+    }
   }
 
   async function remove(place: TripPlace) {
@@ -233,6 +258,7 @@ export function useTripMap(trip: Trip) {
     selectedPlace, selectedItems, selectPlace: setSelectedPlaceId, hoveredPlaceId, hoverPlace: setHoveredPlaceId,
     day, setDay, route, plan, keepFirst, setKeepFirst, pending, routeMessage,
     addResult, createManual, update, remove, addToDay, suggest, apply, cancelPlan, refreshItinerary, itineraryVersion,
+    syncItinerary, reloadPlaces, reloadMembers,
   }
 }
 

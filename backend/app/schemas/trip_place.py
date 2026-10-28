@@ -104,5 +104,6 @@ class TripPlaceResponse(BaseModel):
     provider: str
     provider_place_id: Optional[str]
     note: Optional[str]
+    version: int
     created_at: datetime
     updated_at: datetime

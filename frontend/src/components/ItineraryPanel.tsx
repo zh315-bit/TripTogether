@@ -195,8 +195,9 @@ export function ItineraryPanel({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
-  const load = useCallback(async () => {
-    setStatus('loading')
+  const load = useCallback(async (silent = false) => {
+    // A silent reload (another member's change) keeps the list on screen meanwhile.
+    if (!silent) setStatus('loading')
     try {
       setItems(await listItinerary(request, String(trip.id)))
       setStatus('ready')
@@ -207,7 +208,7 @@ export function ItineraryPanel({
   }, [request, trip.id])
 
   useEffect(() => {
-    void load()
+    void load(refreshKey > 0)
   }, [load, refreshKey])
 
   useEffect(() => {
@@ -293,6 +294,8 @@ export function ItineraryPanel({
       </div>
       {status === 'loading' && <p role="status">Loading itinerary...</p>}
       {status === 'error' && <p className="form-error" role="alert">{message}</p>}
+      {/* Conflicts and failures show here, above the list, where the user is looking. */}
+      {message && status === 'ready' && <p className="form-error" role="alert">{message}</p>}
       {status === 'ready' && grouped.length === 0 && <p className="muted-copy">No itinerary items yet.</p>}
       {grouped.map(([date, dayItems]) => <section className="itinerary-day" key={date}>
         <div className="itinerary-day-heading">
@@ -343,11 +346,20 @@ export function ItineraryPanel({
           places={places}
           onCancel={() => setEditing(null)}
           onSubmit={async (value) => {
-            const updated = await updateItineraryItem(request, String(trip.id), editing.id, value)
-            onChanged?.()
-            setItems((current) => current.map((item) => item.id === updated.id ? updated : item)
-              .sort((a, b) => a.date.localeCompare(b.date) || a.position - b.position))
-            setEditing(null)
+            try {
+              const updated = await updateItineraryItem(request, String(trip.id), editing.id, value, editing.version)
+              onChanged?.()
+              setItems((current) => current.map((item) => item.id === updated.id ? updated : item)
+                .sort((a, b) => a.date.localeCompare(b.date) || a.position - b.position))
+              setEditing(null)
+            } catch (error) {
+              if (!(error instanceof ApiError) || error.code !== 'STALE_VERSION') throw error
+              // The edit was based on an older version: show the newest one instead of overwriting it.
+              setEditing(null)
+              setMessage('This item was changed by another member while you were editing. The latest version has been loaded; please review it and edit again.')
+              await load(true)
+              onChanged?.()
+            }
           }}
         />
       </section> : <section className="trip-editor" aria-labelledby="add-itinerary-title">
@@ -363,7 +375,6 @@ export function ItineraryPanel({
           }}
         />
       </section>}
-      {message && status === 'ready' && <p className="form-error" role="alert">{message}</p>}
     </section>
   )
 }

@@ -76,6 +76,48 @@ function isApiErrorPayload(body: unknown): body is ApiErrorPayload {
 
 export type ApiRequestOptions = RequestInit & { accessToken?: string }
 
+/** The error the backend's JSON envelope describes, or a generic one for any other failure body. */
+async function errorFromResponse(response: Response): Promise<ApiError> {
+  const body: unknown = await response.json().catch(() => null)
+  if (isApiErrorPayload(body)) {
+    return new ApiError(
+      response.status, body.error.code, body.error.message, body.error.details,
+      parseRetryAfter(response.headers.get('Retry-After')),
+    )
+  }
+  return new ApiError(response.status, 'HTTP_ERROR', `The backend returned HTTP ${response.status}.`)
+}
+
+/**
+ * Opens a long-lived text/event-stream response with the same base URL, Bearer
+ * header and error envelope as apiFetch, but without its request timeout. The
+ * caller reads `response.body` and aborts `signal` to close the connection.
+ */
+export async function apiStream(path: string, options: ApiRequestOptions & { signal: AbortSignal }): Promise<Response> {
+  const { accessToken, signal, ...init } = options
+  const baseUrl = getBaseUrl()
+  if (!path.startsWith('/') || path.startsWith('//') || path.includes('\\')) {
+    throw new ApiError(0, 'CONFIG_ERROR', 'API paths must start with a single slash.')
+  }
+  const headers = new Headers(init.headers)
+  headers.set('Accept', 'text/event-stream')
+  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
+  let response: Response
+  try {
+    response = await fetch(`${baseUrl}${path}`, {
+      ...init, headers, signal, credentials: 'omit', redirect: 'error', cache: 'no-store',
+    })
+  } catch (error) {
+    if (signal.aborted) throw error
+    throw new ApiError(0, 'NETWORK_ERROR', 'The backend could not be reached.')
+  }
+  if (!response.ok) throw await errorFromResponse(response)
+  if (!(response.headers.get('Content-Type') ?? '').startsWith('text/event-stream') || !response.body) {
+    throw new ApiError(response.status, 'INVALID_RESPONSE', 'Expected an event stream.')
+  }
+  return response
+}
+
 export async function apiFetch<T>(
   path: string,
   options?: ApiRequestOptions,

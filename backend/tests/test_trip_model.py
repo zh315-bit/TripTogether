@@ -20,7 +20,7 @@ def test_trip_metadata():
     assert Base.metadata.tables["trips"] is table
     assert set(table.columns.keys()) == {
         "id", "name", "destination", "start_date", "end_date",
-        "owner_id", "created_at", "updated_at",
+        "owner_id", "version", "created_at", "updated_at",
     }
     assert list(table.primary_key.columns.keys()) == ["id"]
     assert isinstance(table.c.id.type, Integer)

@@ -44,8 +44,8 @@ def test_openapi_is_complete_and_unique():
         assert client.get("/docs").status_code == 200
     operations = [(path, method, operation) for path, methods in spec["paths"].items()
                   for method, operation in methods.items()]
-    assert len(operations) == 35
-    assert sum(path.startswith(PREFIX + "/") for path, _, _ in operations) == 33
+    assert len(operations) == 36
+    assert sum(path.startswith(PREFIX + "/") for path, _, _ in operations) == 34
     ids = [op["operationId"] for _, _, op in operations]
     assert len(ids) == len(set(ids))
     assert set(spec["paths"]) >= {
@@ -55,6 +55,7 @@ def test_openapi_is_complete_and_unique():
         PREFIX + "/trips/{trip_id}/balances", PREFIX + "/trips/{trip_id}/places",
         PREFIX + "/trips/{trip_id}/places/{place_id}", PREFIX + "/geocode",
         PREFIX + "/trips/{trip_id}/itinerary/route", PREFIX + "/trips/{trip_id}/itinerary/optimize",
+        PREFIX + "/trips/{trip_id}/events",
         "/health", "/ready",
     }
     for path, method, op in operations:
@@ -76,7 +77,9 @@ def test_openapi_is_complete_and_unique():
             assert op["security"] == [{"BearerAuth": []}]
     for route in app.routes:
         if isinstance(route, APIRoute) and route.include_in_schema:
-            assert route.response_model is not None or route.status_code == 204
+            # The SSE stream is text/event-stream, not a JSON model.
+            assert (route.response_model is not None or route.status_code == 204
+                    or route.path.endswith("/events"))
 
 
 def test_every_protected_v1_operation_rejects_anonymous_before_database():
@@ -93,7 +96,7 @@ def test_every_protected_v1_operation_rejects_anonymous_before_database():
                         error_contract(response, 401, "INVALID_CREDENTIALS")
                         assert response.headers["www-authenticate"] == "Bearer"
                         checked += 1
-            assert checked == 31
+            assert checked == 32
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -157,7 +160,7 @@ def test_real_v1_client_workflow(registration_client, jwt_environment):
     trip_response = client.post(PREFIX + "/trips", headers=ah, json=TRIP)
     assert trip_response.status_code == 201
     trip = trip_response.json()
-    assert set(trip) == set(TRIP) | {"id", "owner_id", "created_at", "updated_at"}
+    assert set(trip) == set(TRIP) | {"id", "owner_id", "version", "created_at", "updated_at"}
     assert_datetime(trip["created_at"])
     assert_datetime(trip["updated_at"])
     assert trip["start_date"] == "2027-06-10"

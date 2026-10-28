@@ -5,9 +5,9 @@ import { createInvitation, listMembers } from '../api/collaboration'
 import { useAuth } from '../auth/AuthContext'
 import type { TripMember } from '../types/collaboration'
 
-type Props = { tripId: string; owner: boolean }
+type Props = { tripId: string; owner: boolean; refreshKey?: number }
 
-export function MembersPanel({ tripId, owner }: Props) {
+export function MembersPanel({ tripId, owner, refreshKey = 0 }: Props) {
   const { request } = useAuth()
   const [members, setMembers] = useState<TripMember[]>([])
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -15,8 +15,8 @@ export function MembersPanel({ tripId, owner }: Props) {
   const [email, setEmail] = useState('')
   const [pending, setPending] = useState(false)
 
-  const load = useCallback(async () => {
-    setStatus('loading')
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setStatus('loading')
     try {
       setMembers(await listMembers(request, tripId))
       setStatus('ready')
@@ -27,8 +27,8 @@ export function MembersPanel({ tripId, owner }: Props) {
   }, [request, tripId])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    void load(refreshKey > 0)
+  }, [load, refreshKey])
 
   async function invite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()

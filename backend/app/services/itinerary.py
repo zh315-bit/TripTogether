@@ -7,6 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models import ItineraryItem, Trip, TripPlace
+from app.realtime import TripEvent, stage
 from app.schemas.itinerary import (
     ItineraryItemCreate, ItineraryItemResponse, ItineraryItemUpdate, ItineraryOptimizeRequest,
     ItineraryOptimizeResponse, ItineraryReorderRequest, RouteLeg, RouteResponse, RouteStop,
@@ -14,6 +15,7 @@ from app.schemas.itinerary import (
 )
 from app.services import routing
 from app.services.trips import get_accessible_trip
+from app.services.versioning import require_version
 
 
 MAX_OPTIMIZE_ITEMS = 50
@@ -126,6 +128,8 @@ def create_item(
             position=next_position(db, trip_id, payload.date),
         )
         db.add(item)
+        db.flush()
+        stage(db, TripEvent(trip_id, "itinerary", "created", user_id, item.id, item.version, str(item.date)))
         db.commit()
         db.refresh(item)
         return item
@@ -133,10 +137,12 @@ def create_item(
 
 def update_item(
     db: Session, trip_id: int, user_id: int, item_id: int, payload: ItineraryItemUpdate,
+    expected_version: Optional[int] = None,
 ) -> ItineraryItem:
     trip = get_accessible_trip(db, trip_id, user_id, for_update=True)
     with itinerary_errors(db):
         item = find_item(db, trip_id, item_id)
+        require_version(item, expected_version)
         changes = payload.model_dump(exclude_unset=True)
         if changes.get("place_id") is not None:
             place = validate_place(db, trip_id, changes["place_id"])
@@ -159,6 +165,7 @@ def update_item(
         db.flush()
         if day != old_day:
             assign_positions(db, day_items(db, trip_id, old_day))
+        stage(db, TripEvent(trip_id, "itinerary", "updated", user_id, item.id, item.version, str(day)))
         db.commit()
         db.refresh(item)
         return item
@@ -172,6 +179,7 @@ def delete_item(db: Session, trip_id: int, user_id: int, item_id: int) -> None:
         db.delete(item)
         db.flush()
         assign_positions(db, day_items(db, trip_id, day))
+        stage(db, TripEvent(trip_id, "itinerary", "deleted", user_id, item_id, date=str(day)))
         db.commit()
 
 
@@ -197,6 +205,7 @@ def reorder_items(
             ItineraryItem.trip_id == trip_id, ItineraryItem.date == payload.date,
         ).order_by(ItineraryItem.position).execution_options(populate_existing=True))
         result = [ItineraryItemResponse.model_validate(item) for item in final_items]
+        stage(db, TripEvent(trip_id, "itinerary", "reordered", user_id, date=str(payload.date)))
         db.commit()
         return result
 

@@ -73,5 +73,6 @@ class TripResponse(BaseModel):
     start_date: date
     end_date: date
     owner_id: int
+    version: int
     created_at: datetime
     updated_at: datetime

@@ -1,4 +1,5 @@
 import { ApiError } from './client'
+import { ifMatch } from './trips'
 import type {
   AuthenticatedRequest, Invitation, ItineraryInput, ItineraryItem, TripMember,
 } from '../types/collaboration'
@@ -81,6 +82,7 @@ function parseItineraryItem(body: unknown): ItineraryItem {
     place_id: nullableNumber(value.place_id, 'place_id'),
     position: number(value.position, 'position'),
     created_by_user_id: number(value.created_by_user_id, 'created_by_user_id'),
+    version: number(value.version, 'version'),
     created_at: text(value.created_at, 'created_at'),
     updated_at: text(value.updated_at, 'updated_at'),
   }
@@ -152,10 +154,14 @@ export async function createItineraryItem(
 
 export async function updateItineraryItem(
   request: AuthenticatedRequest, tripId: string, itemId: number, payload: Partial<ItineraryInput>,
+  version?: number,
 ): Promise<ItineraryItem> {
   return parseItineraryItem(await request<unknown>(
     `/api/v1/trips/${encodeURIComponent(tripId)}/itinerary/${itemId}`,
-    { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) },
+    {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json', ...ifMatch(version) },
+      body: JSON.stringify(payload),
+    },
   ))
 }
 

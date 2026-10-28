@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 import logging
 
@@ -9,6 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.auth import router as auth_router
 from app.api.errors import APIErrorResponse, http_error_handler, validation_error_handler
+from app.api.events import router as events_router
 from app.api.trips import router as trips_router
 from app.api.invitations import router as invitations_router
 from app.api.itinerary import route_router as itinerary_route_router, router as itinerary_router
@@ -21,6 +23,7 @@ from app.core.config import (
     get_app_settings, get_database_url, get_geocoder_settings, get_jwt_settings,
 )
 from app.core.logging import SafeErrorMiddleware, configure_logging
+from app.realtime import broker
 
 
 logger = logging.getLogger("triptogether")
@@ -37,10 +40,13 @@ async def lifespan(application: FastAPI):
         except ValueError:
             logger.error("Production configuration invalid")
             raise RuntimeError("Production configuration invalid") from None
+    # Request threads publish through this loop; streams end when it closes.
+    broker.bind(asyncio.get_running_loop())
     logger.info("Application startup")
     try:
         yield
     finally:
+        broker.close()
         logger.info("Application shutdown")
 
 
@@ -60,6 +66,7 @@ def create_app() -> FastAPI:
                 ("balances", "Read-only balances and suggested settlements"),
                 ("places", "Shared candidate places; coordinates fixed after creation"),
                 ("geocoding", "Explicit place search through a rate-limited server proxy"),
+                ("events", "Server-sent trip change notifications for live refresh"),
                 ("system", "Liveness and readiness"),
             )
         ],
@@ -77,6 +84,7 @@ def create_app() -> FastAPI:
     # New resources are versioned only; they have no legacy alias.
     versioned.include_router(trip_places_router)
     versioned.include_router(geocode_router)
+    versioned.include_router(events_router)
     # Existing routers describe legacy errors; v1 documents the new envelope.
     for route in versioned.routes:
         if isinstance(route, APIRoute) and route.path.startswith("/api/v1/"):
@@ -90,10 +98,10 @@ def create_app() -> FastAPI:
     application.add_middleware(
         CORSMiddleware, allow_origins=list(settings.cors_origins), allow_credentials=False,
         allow_methods=["GET", "POST", "PATCH", "DELETE"],
-        allow_headers=["Authorization", "Content-Type"], max_age=600,
+        allow_headers=["Authorization", "Content-Type", "If-Match"], max_age=600,
         # Not CORS-safelisted: without this a cross-origin client cannot read the
-        # GEOCODER_BUSY retry delay.
-        expose_headers=["Retry-After"],
+        # GEOCODER_BUSY retry delay or an entity version.
+        expose_headers=["ETag", "Retry-After"],
     )
     return application
 

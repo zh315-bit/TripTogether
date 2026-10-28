@@ -11,7 +11,7 @@ const stamp = '2026-09-20T00:00:00Z'
 const user = { id: 7, username: 'reader', email: 'reader@example.com', created_at: stamp }
 const tokyo = {
   id: 12, name: 'Tokyo', destination: 'Japan', start_date: '2027-06-10', end_date: '2027-06-15',
-  owner_id: 7, created_at: stamp, updated_at: stamp,
+  owner_id: 7, created_at: stamp, version: 1, updated_at: stamp,
 }
 const paris = { ...tokyo, id: 13, name: 'Paris', destination: 'France', owner_id: 99 }
 const invitation = { id: 4, trip_id: 20, inviter_id: 99, invitee_id: 7, status: 'pending', created_at: stamp, responded_at: null }

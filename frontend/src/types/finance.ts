@@ -14,6 +14,7 @@ export type Expense = {
   paid_by_user_id: number
   expense_date: string
   created_by_user_id: number
+  version: number
   created_at: string
   updated_at: string
   splits: ExpenseSplit[]

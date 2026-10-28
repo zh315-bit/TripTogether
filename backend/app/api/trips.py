@@ -1,10 +1,10 @@
 from contextlib import contextmanager
-from typing import Annotated, Iterator
+from typing import Annotated, Iterator, Optional
 
 from fastapi import APIRouter, Depends, Path, Response
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_current_user
+from app.api.dependencies import etag, get_current_user, if_match_version
 from app.api.errors import APIError, APIErrorResponse
 from app.db.session import get_db
 from app.models import User
@@ -12,6 +12,7 @@ from app.schemas.trip import TripCreate, TripResponse, TripUpdate
 from app.schemas.membership import TripMemberResponse
 from app.services.memberships import list_members
 from app.services import trips
+from app.services.versioning import StaleVersionError
 
 
 router = APIRouter(
@@ -20,6 +21,7 @@ router = APIRouter(
         401: {"model": APIErrorResponse},
         404: {"model": APIErrorResponse},
         409: {"model": APIErrorResponse},
+        412: {"model": APIErrorResponse},
         422: {"model": APIErrorResponse},
         503: {"model": APIErrorResponse},
     },
@@ -34,6 +36,11 @@ def trip_http_errors() -> Iterator[None]:
         yield
     except trips.TripNotFoundError:
         raise APIError(status_code=404, detail="Trip not found", code="TRIP_NOT_FOUND") from None
+    except StaleVersionError:
+        raise APIError(
+            status_code=412, detail="Another member changed this first; reload and retry",
+            code="STALE_VERSION",
+        ) from None
     except trips.TripItineraryConflictError:
         raise APIError(
             status_code=409, detail="Existing itinerary falls outside the requested trip dates",
@@ -69,12 +76,14 @@ def collection(
 
 @router.get("/{trip_id}", response_model=TripResponse)
 def detail(
-    trip_id: TripID,
+    trip_id: TripID, response: Response,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> TripResponse:
     with trip_http_errors():
-        return TripResponse.model_validate(trips.get_accessible_trip(db, trip_id, current_user.id))
+        trip = TripResponse.model_validate(trips.get_accessible_trip(db, trip_id, current_user.id))
+    response.headers["ETag"] = etag(trip.version)
+    return trip
 
 
 @router.get("/{trip_id}/members", response_model=list[TripMemberResponse])
@@ -89,12 +98,16 @@ def members(
 
 @router.patch("/{trip_id}", response_model=TripResponse)
 def update(
-    trip_id: TripID, payload: TripUpdate,
+    trip_id: TripID, payload: TripUpdate, response: Response,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    expected_version: Optional[int] = Depends(if_match_version),
 ) -> TripResponse:
     with trip_http_errors():
-        return TripResponse.model_validate(trips.update_trip(db, trip_id, current_user.id, payload))
+        trip = TripResponse.model_validate(
+            trips.update_trip(db, trip_id, current_user.id, payload, expected_version))
+    response.headers["ETag"] = etag(trip.version)
+    return trip
 
 
 @router.delete("/{trip_id}", status_code=204)

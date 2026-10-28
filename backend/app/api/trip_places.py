@@ -1,10 +1,10 @@
 from contextlib import contextmanager
-from typing import Iterator
+from typing import Iterator, Optional
 
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_current_user
+from app.api.dependencies import etag, get_current_user, if_match_version
 from app.api.errors import APIError, APIErrorResponse
 from app.api.trips import TripID, trip_http_errors
 from app.db.session import get_db
@@ -16,8 +16,8 @@ from app.services.geocoding import GeocodingService, get_geocoding_service
 
 router = APIRouter(prefix="/trips/{trip_id}/places", tags=["places"], responses={
     401: {"model": APIErrorResponse}, 404: {"model": APIErrorResponse},
-    409: {"model": APIErrorResponse}, 422: {"model": APIErrorResponse},
-    503: {"model": APIErrorResponse},
+    409: {"model": APIErrorResponse}, 412: {"model": APIErrorResponse},
+    422: {"model": APIErrorResponse}, 503: {"model": APIErrorResponse},
 })
 
 
@@ -65,22 +65,27 @@ def collection(
 
 @router.get("/{place_id}", response_model=TripPlaceResponse)
 def detail(
-    trip_id: TripID, place_id: TripID,
+    trip_id: TripID, place_id: TripID, response: Response,
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db),
 ) -> TripPlaceResponse:
     with place_http_errors():
-        return TripPlaceResponse.model_validate(
+        place = TripPlaceResponse.model_validate(
             trip_places.get_place(db, trip_id, current_user.id, place_id))
+    response.headers["ETag"] = etag(place.version)
+    return place
 
 
 @router.patch("/{place_id}", response_model=TripPlaceResponse)
 def update(
-    trip_id: TripID, place_id: TripID, payload: TripPlaceUpdate,
+    trip_id: TripID, place_id: TripID, payload: TripPlaceUpdate, response: Response,
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db),
+    expected_version: Optional[int] = Depends(if_match_version),
 ) -> TripPlaceResponse:
     with place_http_errors():
-        return TripPlaceResponse.model_validate(
-            trip_places.update_place(db, trip_id, current_user.id, place_id, payload))
+        place = TripPlaceResponse.model_validate(trip_places.update_place(
+            db, trip_id, current_user.id, place_id, payload, expected_version))
+    response.headers["ETag"] = etag(place.version)
+    return place
 
 
 @router.delete("/{place_id}", status_code=204)

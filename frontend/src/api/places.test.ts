@@ -7,7 +7,7 @@ const stamp = '2026-09-20T00:00:00Z'
 const place = {
   id: 1, trip_id: 12, proposed_by_user_id: 7, name: 'Senso-ji', address: null, latitude: 35.714766,
   longitude: 139.796655, provider: 'nominatim', provider_place_id: 'N123', note: null,
-  created_at: stamp, updated_at: stamp,
+  created_at: stamp, version: 1, updated_at: stamp,
 }
 const route = {
   date: '2027-06-10',
@@ -66,5 +66,13 @@ describe('place and route adapters', () => {
   ])('rejects a malformed route %#', async (body) => {
     await expect(getDayRoute(vi.fn().mockResolvedValue(body), '12', '2027-06-10'))
       .rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  })
+
+  it('sends the place version as If-Match when given', async () => {
+    const request = vi.fn().mockResolvedValue(place)
+    await updatePlace(request, '12', 1, { note: 'x' }, 3)
+    expect(request.mock.calls[0][1].headers).toEqual({ 'Content-Type': 'application/json', 'If-Match': '"3"' })
+    await updatePlace(request, '12', 1, { note: 'x' })
+    expect(request.mock.calls[1][1].headers).toEqual({ 'Content-Type': 'application/json' })
   })
 })

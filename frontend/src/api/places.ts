@@ -1,4 +1,5 @@
 import { ApiError } from './client'
+import { ifMatch } from './trips'
 import type { AuthenticatedRequest } from '../types/trip'
 import type {
   DayRoute, GeocodeResult, OptimizePlan, PlaceInput, PlaceUpdate, RouteLeg, RouteStop, TripPlace,
@@ -51,6 +52,7 @@ export function parsePlace(body: unknown): TripPlace {
     provider: text(value.provider, 'provider'),
     provider_place_id: nullableText(value.provider_place_id, 'provider_place_id'),
     note: nullableText(value.note, 'note'),
+    version: number(value.version, 'version'),
     created_at: text(value.created_at, 'created_at'),
     updated_at: text(value.updated_at, 'updated_at'),
   }
@@ -131,9 +133,11 @@ export async function createPlace(
 }
 
 export async function updatePlace(
-  request: AuthenticatedRequest, tripId: string, placeId: number, payload: PlaceUpdate,
+  request: AuthenticatedRequest, tripId: string, placeId: number, payload: PlaceUpdate, version?: number,
 ): Promise<TripPlace> {
-  return parsePlace(await request<unknown>(`${placesPath(tripId)}/${placeId}`, jsonInit('PATCH', payload)))
+  const init = jsonInit('PATCH', payload)
+  return parsePlace(await request<unknown>(`${placesPath(tripId)}/${placeId}`,
+    { ...init, headers: { ...init.headers, ...ifMatch(version) } }))
 }
 
 export function deletePlace(request: AuthenticatedRequest, tripId: string, placeId: number): Promise<void> {

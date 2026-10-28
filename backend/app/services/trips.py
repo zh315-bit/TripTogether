@@ -1,12 +1,14 @@
 from contextlib import contextmanager
-from typing import Iterator
+from typing import Iterator, Optional
 
 from sqlalchemy import or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models import ItineraryItem, Trip, TripMember
+from app.realtime import TripEvent, stage
 from app.schemas.trip import TripCreate, TripUpdate
+from app.services.versioning import require_version
 
 
 class TripNotFoundError(Exception):
@@ -88,10 +90,14 @@ def list_trips(db: Session, user_id: int) -> list[Trip]:
         ))
 
 
-def update_trip(db: Session, trip_id: int, owner_id: int, payload: TripUpdate) -> Trip:
+def update_trip(
+    db: Session, trip_id: int, owner_id: int, payload: TripUpdate,
+    expected_version: Optional[int] = None,
+) -> Trip:
     # Lock before merging so concurrent partial updates validate the latest row.
     trip = get_owned_trip(db, trip_id, owner_id, for_update=True)
     with database_errors(db):
+        require_version(trip, expected_version)
         changes = payload.model_dump(exclude_unset=True)
         start_date = changes.get("start_date", trip.start_date)
         end_date = changes.get("end_date", trip.end_date)
@@ -106,6 +112,8 @@ def update_trip(db: Session, trip_id: int, owner_id: int, payload: TripUpdate) -
                 raise TripItineraryConflictError()
         for field, value in changes.items():
             setattr(trip, field, value)
+        db.flush()
+        stage(db, TripEvent(trip_id, "trip", "updated", owner_id, trip.id, trip.version))
         db.commit()
         db.refresh(trip)
         return trip
@@ -115,4 +123,5 @@ def delete_trip(db: Session, trip_id: int, owner_id: int) -> None:
     trip = get_owned_trip(db, trip_id, owner_id, for_update=True)
     with database_errors(db):
         db.delete(trip)
+        stage(db, TripEvent(trip_id, "trip", "deleted", owner_id, trip_id))
         db.commit()

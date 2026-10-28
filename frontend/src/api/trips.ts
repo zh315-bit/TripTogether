@@ -10,6 +10,7 @@ function parseTrip(body: unknown): Trip {
     !('start_date' in body) || typeof body.start_date !== 'string' ||
     !('end_date' in body) || typeof body.end_date !== 'string' ||
     !('owner_id' in body) || typeof body.owner_id !== 'number' ||
+    !('version' in body) || typeof body.version !== 'number' ||
     !('created_at' in body) || typeof body.created_at !== 'string' ||
     !('updated_at' in body) || typeof body.updated_at !== 'string'
   ) {
@@ -22,6 +23,7 @@ function parseTrip(body: unknown): Trip {
     start_date: body.start_date,
     end_date: body.end_date,
     owner_id: body.owner_id,
+    version: body.version,
     created_at: body.created_at,
     updated_at: body.updated_at,
   }
@@ -53,14 +55,20 @@ export async function createTrip(
   }))
 }
 
+/** Builds the If-Match header from the version last seen; the server answers 412 if it moved on. */
+export function ifMatch(version?: number): Record<string, string> {
+  return version === undefined ? {} : { 'If-Match': `"${version}"` }
+}
+
 export async function updateTrip(
   request: AuthenticatedRequest,
   tripId: string,
   payload: Partial<TripInput>,
+  version?: number,
 ): Promise<Trip> {
   return parseTrip(await request<unknown>(`/api/v1/trips/${encodeURIComponent(tripId)}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...ifMatch(version) },
     body: JSON.stringify(payload),
   }))
 }

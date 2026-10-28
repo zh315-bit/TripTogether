@@ -317,3 +317,18 @@ The React client implements the guidance above in `src/components/map/`:
 - Day route, optimize preview, apply with `expected_item_ids`, and 409 reload
   without retry follow the Routes section above. The itinerary panel's manual
   up/down reorder also sends `expected_item_ids`.
+
+## Live Updates and Conflicts
+
+Open `GET /api/v1/trips/{trip_id}/events` with `fetch` (an `EventSource`
+cannot send the Bearer header) and parse the `text/event-stream` body. The web
+client does this in `src/api/events.ts`: on every event it refetches the list
+the event names, it reconnects with backoff when the stream drops, and it
+treats the `ready` of a reconnected stream as a full resync. The signed-in
+member's own events arrive too; refetching them is harmless, but the UI only
+shows a notice for other members' changes.
+
+Edit forms keep the `version` of the row they loaded and send it as
+`If-Match` on PATCH. On `412 STALE_VERSION` the client must not retry with the
+same body: reload the row, show it, and let the user edit again. Reorder keeps
+its own guard (`expected_item_ids`, 409 `ITINERARY_CONFLICT`).

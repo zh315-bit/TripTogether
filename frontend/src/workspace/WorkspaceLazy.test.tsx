@@ -23,7 +23,7 @@ describe('lazy workspace', () => {
       if (url.endsWith('/me')) return json({ id: 7, username: 'reader', email: 'r@example.com', created_at: stamp })
       if (url.endsWith('/api/v1/trips')) return json([{
         id: 12, name: 'Tokyo', destination: 'Japan', start_date: '2027-06-10', end_date: '2027-06-12',
-        owner_id: 7, created_at: stamp, updated_at: stamp,
+        owner_id: 7, created_at: stamp, version: 1, updated_at: stamp,
       }])
       return json([])
     }))

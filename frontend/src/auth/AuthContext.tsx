@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import * as authApi from '../api/auth'
-import { ApiError, apiFetch } from '../api/client'
+import { ApiError, apiFetch, apiStream } from '../api/client'
 import type { LoginRequest, User } from '../types/auth'
 import { tokenStorage } from './tokenStorage'
 
@@ -16,6 +16,8 @@ type AuthContextValue = {
   logout: () => void
   restore: () => Promise<void>
   request: <T>(path: string, init?: RequestInit) => Promise<T>
+  /** Opens an authenticated event stream; a 401 ends the session like any other request. */
+  stream: (path: string, signal: AbortSignal) => Promise<Response>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -108,7 +110,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [logout])
 
-  return <AuthContext.Provider value={{ state, login, logout, restore, request }}>
+  const stream = useCallback(async (path: string, signal: AbortSignal): Promise<Response> => {
+    const credential = token.current
+    const currentOperation = operation.current
+    if (!credential) throw new ApiError(401, 'INVALID_CREDENTIALS', 'Please log in.')
+    try {
+      return await apiStream(path, { accessToken: credential, signal })
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401 &&
+        token.current === credential && operation.current === currentOperation) {
+        logout()
+      }
+      throw error
+    }
+  }, [logout])
+
+  return <AuthContext.Provider value={{ state, login, logout, restore, request, stream }}>
     {children}
   </AuthContext.Provider>
 }

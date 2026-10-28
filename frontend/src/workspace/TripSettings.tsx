@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ApiError } from '../api/client'
-import { deleteTrip, updateTrip } from '../api/trips'
+import { deleteTrip, getTrip, updateTrip } from '../api/trips'
 import { useAuth } from '../auth/AuthContext'
 import { TripForm } from '../components/TripForm'
 import type { Trip } from '../types/trip'
@@ -42,7 +42,14 @@ export function TripSettings({ trip, owner, onUpdated, onDeleted }: Props) {
         pendingLabel="Saving changes..."
         onCancel={() => setMode('view')}
         onSubmit={async (value) => {
-          onUpdated(await updateTrip(request, String(trip.id), value))
+          try {
+            onUpdated(await updateTrip(request, String(trip.id), value, trip.version))
+          } catch (error) {
+            if (!(error instanceof ApiError) || error.code !== 'STALE_VERSION') throw error
+            // Show the newer details rather than overwrite them.
+            onUpdated(await getTrip(request, String(trip.id)))
+            setMessage('The trip details were changed by another member first. The latest values are shown; edit again if needed.')
+          }
           setMode('view')
         }}
       />

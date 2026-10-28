@@ -45,8 +45,8 @@ is recipient identity, not a Trip role. Forbidden resources remain hidden404.
 
 ## Official Client API After Step 11
 
-35 documented operations: Auth3, Trips5, Members1, Invitations4, Itinerary8,
-Expenses5, Balances1, Places5, Geocoding1, System2. Counts are method/path pairs, not distinct URLs.
+36 documented operations: Auth3, Trips5, Members1, Invitations4, Itinerary8,
+Expenses5, Balances1, Places5, Geocoding1, Events1, System2. Counts are method/path pairs, not distinct URLs.
 All official success schemas retain their original fields. All listed errors
 use APIErrorResponse; generic unexpected500 and infrastructure503 can occur on
 business operations. Framework unknown-path404 and wrong-method405 use the
@@ -62,7 +62,7 @@ same envelope inside `/api/v1`.
 | POST | /api/v1/trips | JWT | Any user | TripCreate | 201 TripResponse | 401,422,503 |
 | GET | /api/v1/trips | JWT | Owned/joined only | None | 200 TripResponse[] | 401,503 |
 | GET | /api/v1/trips/{trip_id} | JWT | Owner/Member | None | 200 TripResponse | 401,404,422,503 |
-| PATCH | /api/v1/trips/{trip_id} | JWT | Owner | TripUpdate | 200 TripResponse | 401,404,409,422,503 |
+| PATCH | /api/v1/trips/{trip_id} | JWT | Owner | TripUpdate | 200 TripResponse | 401,404,409,412,422,503 |
 | DELETE | /api/v1/trips/{trip_id} | JWT | Owner | None | 204 empty | 401,404,422,503 |
 | GET | /api/v1/trips/{trip_id}/members | JWT | Owner/Member | None | 200 TripMemberResponse[] | 401,404,422,503 |
 | POST | /api/v1/trips/{trip_id}/invitations | JWT | Owner | InvitationCreate | 201 InvitationResponse | 401,404,409,422,503 |
@@ -72,7 +72,7 @@ same envelope inside `/api/v1`.
 | POST | /api/v1/trips/{trip_id}/itinerary | JWT | Owner/Member | ItineraryItemCreate | 201 ItineraryItemResponse | 401,404,422,503 |
 | GET | /api/v1/trips/{trip_id}/itinerary | JWT | Owner/Member | None | 200 ItineraryItemResponse[] | 401,404,422,503 |
 | GET | /api/v1/trips/{trip_id}/itinerary/{item_id} | JWT | Owner/Member | None | 200 ItineraryItemResponse | 401,404,422,503 |
-| PATCH | /api/v1/trips/{trip_id}/itinerary/{item_id} | JWT | Owner/Member | ItineraryItemUpdate | 200 ItineraryItemResponse | 401,404,422,503 |
+| PATCH | /api/v1/trips/{trip_id}/itinerary/{item_id} | JWT | Owner/Member | ItineraryItemUpdate | 200 ItineraryItemResponse | 401,404,412,422,503 |
 | DELETE | /api/v1/trips/{trip_id}/itinerary/{item_id} | JWT | Owner/Member | None | 204 empty | 401,404,422,503 |
 | PATCH | /api/v1/trips/{trip_id}/itinerary/reorder | JWT | Owner/Member | ItineraryReorderRequest | 200 ItineraryItemResponse[] | 401,404,409,422,503 |
 | GET | /api/v1/trips/{trip_id}/itinerary/route?date= | JWT | Owner/Member | Query date | 200 RouteResponse | 401,404,422,503 |
@@ -80,13 +80,14 @@ same envelope inside `/api/v1`.
 | POST | /api/v1/trips/{trip_id}/expenses | JWT | Owner/Member | ExpenseCreate | 201 ExpenseResponse | 401,404,409,422,503 |
 | GET | /api/v1/trips/{trip_id}/expenses | JWT | Owner/Member | None | 200 ExpenseResponse[] | 401,404,422,503 |
 | GET | /api/v1/trips/{trip_id}/expenses/{expense_id} | JWT | Owner/Member | None | 200 ExpenseResponse | 401,404,422,503 |
-| PATCH | /api/v1/trips/{trip_id}/expenses/{expense_id} | JWT | Owner/Member | ExpenseUpdate | 200 ExpenseResponse | 401,404,409,422,503 |
+| PATCH | /api/v1/trips/{trip_id}/expenses/{expense_id} | JWT | Owner/Member | ExpenseUpdate | 200 ExpenseResponse | 401,404,409,412,422,503 |
 | DELETE | /api/v1/trips/{trip_id}/expenses/{expense_id} | JWT | Owner/Member | None | 204 empty | 401,404,422,503 |
 | GET | /api/v1/trips/{trip_id}/balances | JWT | Owner/Member | None | 200 BalanceResponse | 401,404,409,422,503 |
+| GET | /api/v1/trips/{trip_id}/events | JWT | Owner/Member | None | 200 text/event-stream | 401,404,422,503 |
 | POST | /api/v1/trips/{trip_id}/places | JWT | Owner/Member | TripPlaceCreate | 201 TripPlaceResponse | 401,404,409,422,503 |
 | GET | /api/v1/trips/{trip_id}/places | JWT | Owner/Member | None | 200 TripPlaceResponse[] | 401,404,422,503 |
 | GET | /api/v1/trips/{trip_id}/places/{place_id} | JWT | Owner/Member | None | 200 TripPlaceResponse | 401,404,422,503 |
-| PATCH | /api/v1/trips/{trip_id}/places/{place_id} | JWT | Owner/Member | TripPlaceUpdate | 200 TripPlaceResponse | 401,404,422,503 |
+| PATCH | /api/v1/trips/{trip_id}/places/{place_id} | JWT | Owner/Member | TripPlaceUpdate | 200 TripPlaceResponse | 401,404,412,422,503 |
 | DELETE | /api/v1/trips/{trip_id}/places/{place_id} | JWT | Owner/Member | None | 204 empty | 401,404,422,503 |
 | GET | /api/v1/geocode?q=&limit= | JWT | Any user | Query q (2-200), limit (1-10, default 5) | 200 GeocodeResultResponse[] | 401,422,429,503 |
 
@@ -151,3 +152,21 @@ Codes are assigned at business raise sites, not inferred from English strings.
 Validation uses one stable code with useful field details rather than a giant
 code enumeration. See client-integration.md for complete envelope examples.
 Never change a client-facing code casually without checking contract consumers.
+
+## Live Updates and Versions
+
+`GET /api/v1/trips/{trip_id}/events` is a long-lived `text/event-stream`. It
+opens with `event: ready` and then sends one event per committed change in
+that trip: `itinerary.created|updated|deleted|reordered`, `expense.*`,
+`place.*`, `trip.updated|deleted` and `member.joined`, each with a JSON body
+`{type, trip_id, entity, action, actor_id, entity_id?, version?, date?,
+occurred_at}`. A comment line every 20 seconds keeps proxies from closing the
+connection. A `resync` event (or a reconnect) means the client should refetch
+everything. `trip.deleted` ends the stream.
+
+`TripResponse`, `ItineraryItemResponse`, `ExpenseResponse` and
+`TripPlaceResponse` carry an integer `version`, also returned as an `ETag`
+header on their detail and PATCH routes. A PATCH may send `If-Match: "<version>"`
+(a bare number is accepted; `*` or no header skips the check). If the stored
+version differs the response is `412 STALE_VERSION` and nothing is written.
+A malformed header is `400 INVALID_IF_MATCH`.

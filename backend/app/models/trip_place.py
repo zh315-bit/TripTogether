@@ -51,3 +51,6 @@ class TripPlace(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now(),
         onupdate=func.statement_timestamp(),
     )
+    # Optimistic concurrency: bumped by every ORM update; echoed by clients in If-Match.
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    __mapper_args__ = {"version_id_col": version}
