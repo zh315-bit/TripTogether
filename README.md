@@ -14,12 +14,13 @@ A full-stack web app where a small group plans a trip on a shared map, keeps one
 ## Highlights
 
 - **Map-first collaboration.** Members search or pin candidate places (colour-coded per person), link them to itinerary items, and see each day's route with stop-to-stop distances. A route optimiser (nearest neighbour + 2-opt, seeded from every start) proposes a shorter visiting order and detects conflicts before applying it.
-- **Money you can trust.** Amounts are `Numeric(12, 2)` end to end. Equal splits are computed once on the server with a deterministic remainder rule; the browser renders exact decimal strings and never does money arithmetic.
+- **Money you can trust.** Amounts are `Numeric(12, 2)` end to end. An expense is split equally, by shares (weights) or by exact amounts; the server apportions cents with the largest-remainder method and a deterministic tie-break, and the browser renders exact decimal strings without doing money arithmetic.
+- **Fewest transfers to settle.** Balances are partitioned into the most zero-sum groups by a bitmask dynamic programme (exact up to 14 members in debt or credit), and each group settles with a greedy pairing: five members who would need four payments get three, and the response says whether the plan is provably minimal.
 - **Live collaboration.** Every committed change is pushed to the other members over Server-Sent Events; their lists refresh in place with a one-line notice ("Jonas changed an itinerary item"). Events are staged inside the transaction and published only after commit, so a client never refetches a change that rolled back. A dropped stream reconnects with backoff and triggers a full resync.
 - **Concurrency by design.** Writes serialise on the parent trip row (`SELECT … FOR UPDATE`), and every editable row carries a version: clients echo it in `If-Match`, and a stale edit gets a 412 with the newer version shown instead of a silent overwrite. Dedicated concurrency tests cover itinerary, membership, expenses and balances.
 - **Shared rate limiting for an external API.** Place search proxies Nominatim behind a single database-backed throttle row, so the one-request-per-second policy holds across every worker and instance.
 - **Production-shaped from day one.** `/ready` checks JWT config, database connectivity, the Alembic head and all core tables. Migrations are a controlled release step, not a boot side effect. CORS rejects non-HTTPS origins in production.
-- **Tested at every layer.** 280+ backend tests (unit, contract, migration, PostgreSQL integration, query-count audits, a live SSE stream under concurrent writes) and 180+ frontend tests (Vitest + Testing Library), all run in CI with a real PostgreSQL service.
+- **Tested at every layer.** 300+ backend tests (unit, contract, migration, PostgreSQL integration, query-count audits, a live SSE stream under concurrent writes, settlement plans checked against brute force) and 180+ frontend tests (Vitest + Testing Library), all run in CI with a real PostgreSQL service.
 
 ## Features
 
@@ -28,8 +29,8 @@ A full-stack web app where a small group plans a trip on a shared map, keeps one
 | Trips & members | Register (Argon2id), sign in (JWT), create trips, invite registered users, accept or reject invitations |
 | Itinerary | Date-grouped items with create, edit, delete and drag-and-drop reorder (dnd-kit, keyboard accessible) |
 | Map | Search or pin places, add a pool place to any day in one click, link them to items, select from list or map with two-way highlight, frame the selected day, apply a suggested shorter order |
-| Expenses | Exact-decimal expenses with equal splits, per-member summary ("You owe", "You paid", "Your share") |
-| Balances | Server-derived balances and suggested transfers to settle the trip |
+| Expenses | Exact-decimal expenses split equally, by shares or by exact amounts (with an "adds up" check), per-member summary ("You owe", "You paid", "Your share") |
+| Balances | Server-derived balances and the fewest transfers that settle the trip, labelled as minimal or greedy |
 | Live updates | Other members' changes appear within a second, with a notice saying who did what; conflicting edits are detected and never overwrite each other |
 | UX | Responsive map workspace (sidebar on desktop, bottom sheet on phones), loading/empty/error states, in-page confirmations |
 
@@ -77,6 +78,10 @@ Detailed references: [API inventory](docs/api-inventory.md) · [Authorization ma
 | Place detail card | Conflict detected before applying |
 | --- | --- |
 | ![Selected place ringed on the map with its detail card](docs/screenshots/workspace-place-detail.jpg) | ![Conflict message when another member changed the day first](docs/screenshots/map-desktop-conflict.jpg) |
+
+| Split by shares | Fewest transfers |
+| --- | --- |
+| ![An expense split by shares (Mika ×1, Jonas ×2) and the form with per-member share inputs](docs/screenshots/weighted-split.jpg) | ![Five members settled in three transfers, labelled as the fewest possible](docs/screenshots/min-transfer-settlement.jpg) |
 
 <details>
 <summary>More: landing page and phone layout</summary>
@@ -134,7 +139,8 @@ CI ([ci.yml](.github/workflows/ci.yml)) runs both suites on every push and pull 
 
 A few decisions worth knowing about:
 
-- **Why the server owns every number.** Floating-point money and client-side split logic are the classic source of "the balances don't add up". The backend stores `Decimal`, splits with a deterministic remainder (ascending user id), and returns strings; the UI only displays them.
+- **Why the server owns every number.** Floating-point money and client-side split logic are the classic source of "the balances don't add up". The backend stores `Decimal`, apportions shares with the largest-remainder method (floor every proportional share, then hand the leftover cents to the largest fractional remainders, ties to the lowest user id), and returns strings; the UI only displays them. Exact splits are accepted only when they add up to the amount, and the form says how much is still unassigned before it sends anything.
+- **Why settlement is a partition problem.** Any group of k members whose balances sum to zero can settle in k − 1 transfers, so the fewest transfers overall means the most zero-sum groups. The service runs an O(2ⁿ·n) subset DP over members with a nonzero balance (exact up to 14 of them, greedy beyond, and the response says which) and pairs largest debt with largest credit inside each group. The DP is checked against a brute-force partition search in tests.
 - **Why both a trip-level lock and per-row versions.** The lock keeps the database invariants (one split per member, contiguous day order) simple to prove: writes to one trip never interleave. But a lock cannot know that a user started editing from a stale screen, so each editable row also carries a version. The client sends it as `If-Match`; a mismatch is a 412 and the UI shows the newer version instead of overwriting it. Omitting the header keeps the old last-write-wins behaviour for simple clients.
 - **Why Server-Sent Events rather than WebSocket.** The traffic is one way: the server only needs to say "something changed". SSE over `fetch` reuses the Bearer header, the CORS policy and the JSON error envelope of every other route, needs no extra dependency, and reconnects trivially. The client refetches the affected list rather than applying diffs, so the screen is always the server's committed state.
 - **Why events are published after commit.** Services stage events on the SQLAlchemy session; an `after_commit` hook publishes them and `after_rollback` drops them. A subscriber that refetches on an event therefore always sees the row that triggered it. The broker is in-process (one API instance); scaling out means putting PostgreSQL `LISTEN/NOTIFY` or Redis behind the same publish/subscribe interface.
@@ -157,7 +163,7 @@ The step-by-step runbook, environment variable matrix, schema release procedure 
 This is a deliberately small, deployed MVP. The main gaps, all documented in [docs/known-limitations.md](docs/known-limitations.md):
 
 - Live updates fan out inside one API instance; running several instances needs a shared channel behind the broker. Clients that omit `If-Match` still get last-write-wins.
-- Equal splits only, one currency per trip, no refresh tokens or password reset, unpaginated lists.
+- One currency per trip, no percentages (use shares), no refresh tokens or password reset, unpaginated lists.
 - Public OSM tiles and Nominatim are for demos; real traffic needs a commercial or self-hosted provider.
 
-Planned next: weighted splits with a minimum-transfer settlement, Playwright end-to-end tests in CI, and PostgreSQL `LISTEN/NOTIFY` so live updates survive scaling out.
+Planned next: Playwright end-to-end tests in CI, PostgreSQL `LISTEN/NOTIFY` so live updates survive scaling out, and settlement history (marking a suggested transfer as paid).

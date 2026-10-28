@@ -42,10 +42,15 @@ a claim that the service is production secure or feature complete.
   converted. Trip has no separate currency column.
 - Currency is three uppercase letters, not an official registry. All accounting
   uses two decimal places, including currencies whose real minor units differ.
-- Equal split only; deterministic remainder by ascending user ID. No custom
-  weights/percentages. Balances use stored exact shares.
-- Settlement suggestions are derived calculations, not payment processing,
-  repayment history or a globally minimum-number-of-transfers guarantee.
+- Splits are equal, by integer shares (1 to 1,000,000) or by exact amounts
+  that must add up to the total; there are no percentages (express them as
+  shares). Cents are apportioned by the largest-remainder method, ties to the
+  lowest user ID. Balances use the stored exact shares.
+- Settlement suggestions are derived calculations, not payment processing or
+  repayment history. The transfer count is provably minimal while at most 14
+  members have a nonzero balance (exact zero-sum partition search); above that
+  the response says `minimal: false` and a greedy plan of at most n - 1
+  transfers is returned.
 - Itinerary DATE/time are local schedule values without timezone identity;
   no overnight item. Expense dates may precede the trip.
 

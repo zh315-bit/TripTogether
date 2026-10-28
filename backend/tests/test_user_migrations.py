@@ -22,7 +22,7 @@ def test_migration_round_trip_and_metadata(migrated_database) -> None:
         "users", "trips", "trip_members", "trip_invitations", "itinerary_items",
         "expenses", "expense_splits", "trip_places", "geocoder_throttle", "alembic_version",
     }
-    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0008"
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0009"
     command.check(config)
     command.downgrade(config, "base")
     assert "users" not in inspect(connection).get_table_names()

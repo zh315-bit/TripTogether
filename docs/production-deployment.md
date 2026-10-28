@@ -5,10 +5,12 @@ TripTogether is deployed on Vercel, a Render Web Service, and Neon PostgreSQL
 Use this runbook for controlled releases and new database setup. The project
 owner confirmed production registration and Alembic `0005 (head)` after the
 September 2026 missing-table incident. The collaborative-map release adds
-migrations 0006 and 0007; the live-collaboration release adds 0008 (a
+migrations 0006 and 0007; the live-collaboration release added 0008 (a
 `version` column with `DEFAULT 1` on trips, itinerary_items, expenses and
-trip_places, additive and harmless to the previous backend) and expects
-`0008 (head)`. Release schema changes with
+trip_places) and the weighted-splits release adds 0009 (`split_method` on
+expenses with `DEFAULT 'equal'`, a nullable `weight` on expense_splits). Both
+are additive and harmless to the previous backend; this release expects
+`0009 (head)`. Release schema changes with
 [Releasing a schema change](#releasing-a-schema-change-render-free--auto-deploy).
 
 ## Production architecture
@@ -104,7 +106,7 @@ from a trusted environment with the Render database URL supplied as
 `DATABASE_URL`; do not save the URL in the repository or shell history. On a
 Render plan that supports Pre-Deploy Command, configure this as the one
 controlled migration command. Check `python -m alembic current` after the
-migration; this release expects `0008 (head)`. Do not put `alembic upgrade head`
+migration; this release expects `0009 (head)`. Do not put `alembic upgrade head`
 in the web-service start command or run it independently in each worker.
 
 Set Render's health check path to `/ready`. It verifies JWT configuration,
@@ -171,7 +173,7 @@ follow this order exactly:
    ```bash
    cd backend
    APP_ENV=production python -m alembic upgrade head
-   python -m alembic current   # expect: 0008 (head)
+   python -m alembic current   # expect: 0009 (head)
    ```
 
 5. **Merge to `main`.** Wait for the Render backend deploy and the Vercel
@@ -185,8 +187,8 @@ follow this order exactly:
 ### Why this order
 
 - `/ready` only passes when the database revision equals the **running
-  code's** single Alembic head. The old backend accepts only `0005` and the
-  new backend accepts only `0008`, so during the switch-over one of them always
+  code's** single Alembic head. The old backend accepts only `0008` and the
+  new backend accepts only `0009`, so during the switch-over one of them always
   fails readiness. With the health check on `/ready`, Render would mark the
   live old service unhealthy right after the migration, or block the new
   deploy before it. `/health` is liveness-only and stays green for both.
@@ -203,7 +205,7 @@ follow this order exactly:
 
 1. Keep the health check on `/health` and redeploy the previous commit. The
    old backend runs correctly on the new schema; its `/ready` stays 503 while
-   the database is at `0008`.
+   the database is at `0009`.
 2. Only if the schema itself must be removed, run
    `python -m alembic downgrade 0005`. This drops `trip_places` and
    `geocoder_throttle` and the `place_id` column. Itinerary rows and their
@@ -252,7 +254,7 @@ follow this order exactly:
   `DATABASE_URL`, and a JWT key of at least 32 bytes. Inspect Render logs; do
   not paste secrets into logs or tickets.
 - **`/ready` returns 503:** confirm the one controlled Alembic migration has
-  completed (`alembic current` is `0008 (head)`), all nine core tables exist, and
+  completed (`alembic current` is `0009 (head)`), all nine core tables exist, and
   the database is reachable; `/health` distinguishes API liveness from
   dependency readiness.
 - **Browser CORS error:** confirm `CORS_ORIGINS` is valid JSON with the exact

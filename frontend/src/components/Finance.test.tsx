@@ -13,28 +13,33 @@ const members = [1, 2, 3].map((id) => ({
 }))
 const expense = {
   id: 1, trip_id: 12, description: 'Dinner', amount: '100.00', currency: 'USD',
-  paid_by_user_id: 1, expense_date: '2026-09-20', created_by_user_id: 2,
+  paid_by_user_id: 1, expense_date: '2026-09-20', split_method: 'equal', created_by_user_id: 2,
   created_at: '2026-09-20T00:00:00Z', version: 1, updated_at: '2026-09-20T00:00:00Z',
-  splits: [{ user_id: 1, share_amount: '33.34' }, { user_id: 2, share_amount: '33.33' },
-    { user_id: 3, share_amount: '33.33' }],
+  splits: [{ user_id: 1, share_amount: '33.34', weight: null }, { user_id: 2, share_amount: '33.33', weight: null },
+    { user_id: 3, share_amount: '33.33', weight: null }],
 }
 const balance = {
   trip_id: 12, currency: 'USD',
   members: [{ user_id: 1, username: 'Person1', paid: '100.00', share: '33.34', balance: '66.66' },
     { user_id: 2, username: 'Person2', paid: '0.00', share: '33.33', balance: '-33.33' }],
   suggested_settlements: [{ from_user_id: 2, to_user_id: 1, amount: '33.33' }],
+  settlement: { transfers: 1, unsettled_members: 2, minimal: true },
 }
 const json = (data: unknown) => new Response(JSON.stringify(data))
 
-function mount() {
+function mount(rows: unknown[] = [expense], ledger: unknown = balance) {
   const onChanged = vi.fn()
   const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.endsWith('/me')) return json({ id: 2, username: 'Person2', email: 'p2@example.com', created_at: expense.created_at })
     if (url.endsWith('/members')) return json(members)
-    if (url.endsWith('/balances')) return json(balance)
+    if (url.endsWith('/balances')) return json(ledger)
     if (init?.method === 'DELETE') return new Response(null, { status: 204 })
-    if (init?.method) return json({ ...expense, ...JSON.parse(String(init.body)) })
-    return json([expense])
+    if (init?.method) {
+      const sent = JSON.parse(String(init.body)) as Record<string, unknown>
+      delete sent.splits
+      return json({ ...expense, ...sent, splits: expense.splits })
+    }
+    return json(rows)
   })
   vi.stubGlobal('fetch', fetcher)
   sessionStorage.setItem(TOKEN_KEY, 'test-token')
@@ -54,9 +59,81 @@ function Ready({ onChanged }: { onChanged: () => void }) {
 
 it('renders exact stored remainders, negative balances and suggested transfers', async () => {
   mount()
-  expect(await screen.findByText(/Person1 33.34, Person2 33.33, Person3 33.33/)).toBeInTheDocument()
+  expect(await screen.findByText(/Split equally: Person1 33.34, Person2 33.33, Person3 33.33/)).toBeInTheDocument()
   expect(await screen.findByText('Owes: -33.33 USD')).toBeInTheDocument()
   expect(screen.getByText('Suggested settlements (not payments)')).toBeInTheDocument()
+  expect(screen.getByText('1 transfer settles 2 members, the fewest possible.')).toBeInTheDocument()
+})
+
+it('shows share weights and exact splits as the server sent them', async () => {
+  mount([
+    { ...expense, id: 2, description: 'Taxi', split_method: 'shares',
+      splits: [{ user_id: 1, share_amount: '66.67', weight: 2 }, { user_id: 2, share_amount: '33.33', weight: 1 }] },
+    { ...expense, id: 3, description: 'Tickets', split_method: 'exact',
+      splits: [{ user_id: 1, share_amount: '90.00', weight: null }, { user_id: 3, share_amount: '10.00', weight: null }] },
+  ], { ...balance, suggested_settlements: [], settlement: { transfers: 5, unsettled_members: 16, minimal: false } })
+  expect(await screen.findByText('Split by shares: Person1 ×2 66.67, Person2 ×1 33.33')).toBeInTheDocument()
+  expect(screen.getByText('Exact split: Person1 90.00, Person3 10.00')).toBeInTheDocument()
+  expect(await screen.findByText(/5 transfers settle 16 members\. The group is too large/)).toBeInTheDocument()
+})
+
+it('sends weights for a shares split and rejects non-integer shares', async () => {
+  const { fetcher, onChanged } = mount()
+  await screen.findByLabelText('Description')
+  for (const [label, value] of Object.entries({
+    Description: 'Taxi', Amount: '90.00', Currency: 'USD', 'Expense date': '2026-09-20',
+  })) fireEvent.change(screen.getByLabelText(label), { target: { value } })
+  await userEvent.selectOptions(screen.getByLabelText('Paid by'), '1')
+  await userEvent.click(screen.getByLabelText('By shares'))
+  await userEvent.click(screen.getByLabelText('Person1'))
+  await userEvent.click(screen.getByLabelText('Person2'))
+  fireEvent.change(screen.getByLabelText('Person2 shares'), { target: { value: '1.5' } })
+  await userEvent.click(screen.getByRole('button', { name: 'Add expense' }))
+  expect(screen.getByRole('alert')).toHaveTextContent('whole number')
+  fireEvent.change(screen.getByLabelText('Person2 shares'), { target: { value: '3' } })
+  await userEvent.click(screen.getByRole('button', { name: 'Add expense' }))
+  await waitFor(() => expect(onChanged).toHaveBeenCalledOnce())
+  const body = fetcher.mock.calls.find(([, init]) => init?.method === 'POST')?.[1]?.body
+  expect(JSON.parse(String(body))).toEqual(expect.objectContaining({
+    split_method: 'shares', splits: [{ user_id: 1, weight: 1 }, { user_id: 2, weight: 3 }],
+  }))
+  expect(JSON.parse(String(body))).not.toHaveProperty('participant_user_ids')
+})
+
+it('keeps exact amounts honest before sending them', async () => {
+  const { fetcher, onChanged } = mount()
+  await screen.findByLabelText('Description')
+  for (const [label, value] of Object.entries({
+    Description: 'Tickets', Amount: '100.00', Currency: 'USD', 'Expense date': '2026-09-20',
+  })) fireEvent.change(screen.getByLabelText(label), { target: { value } })
+  await userEvent.selectOptions(screen.getByLabelText('Paid by'), '1')
+  await userEvent.click(screen.getByLabelText('Exact amounts'))
+  await userEvent.click(screen.getByLabelText('Person1'))
+  await userEvent.click(screen.getByLabelText('Person3'))
+  fireEvent.change(screen.getByLabelText('Person1 amount'), { target: { value: '90' } })
+  expect(screen.getByRole('status')).toHaveTextContent('Assigned 90.00 of 100.00; 10.00 left.')
+  fireEvent.change(screen.getByLabelText('Person3 amount'), { target: { value: '10.01' } })
+  expect(screen.getByRole('status')).toHaveTextContent('0.01 over')
+  await userEvent.click(screen.getByRole('button', { name: 'Add expense' }))
+  expect(screen.getByRole('alert')).toHaveTextContent('Exact amounts add up to 100.01, not 100.00.')
+  expect(fetcher.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
+  fireEvent.change(screen.getByLabelText('Person3 amount'), { target: { value: '10' } })
+  expect(screen.getByRole('status')).toHaveTextContent('adds up')
+  await userEvent.click(screen.getByRole('button', { name: 'Add expense' }))
+  await waitFor(() => expect(onChanged).toHaveBeenCalledOnce())
+  const body = fetcher.mock.calls.find(([, init]) => init?.method === 'POST')?.[1]?.body
+  expect(JSON.parse(String(body))).toEqual(expect.objectContaining({
+    split_method: 'exact', splits: [{ user_id: 1, amount: '90.00' }, { user_id: 3, amount: '10.00' }],
+  }))
+})
+
+it('opens an existing shares expense with its weights filled in', async () => {
+  mount([{ ...expense, split_method: 'shares',
+    splits: [{ user_id: 1, share_amount: '25.00', weight: 1 }, { user_id: 2, share_amount: '75.00', weight: 3 }] }])
+  await userEvent.click(await screen.findByRole('button', { name: 'Edit expense' }))
+  expect(screen.getByLabelText('By shares')).toBeChecked()
+  expect(screen.getByLabelText('Person2 shares')).toHaveValue('3')
+  expect(screen.queryByLabelText('Person3 shares')).not.toBeInTheDocument()
 })
 
 it('rejects zero and precision errors without posting', async () => {

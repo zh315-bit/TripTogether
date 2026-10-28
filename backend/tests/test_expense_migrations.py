@@ -33,7 +33,7 @@ def test_money_metadata():
 
 def test_0005_round_trip(migrated_database, expense_values):
     conn, config = migrated_database
-    assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0008"
+    assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0009"
     command.check(config)
     command.downgrade(config, "0004")
     assert "expenses" not in inspect(conn).get_table_names()
@@ -61,6 +61,7 @@ def test_expense_not_null(migrated_database, expense_values, column):
     ({"amount": Decimal("0")}, "ck_expenses_amount"),
     ({"amount": Decimal("-1")}, "ck_expenses_amount"),
     ({"amount": Decimal("NaN")}, "ck_expenses_amount"),
+    ({"split_method": "half"}, "ck_expenses_split_method"),
     ({"currency": "usd"}, "ck_expenses_currency"),
     ({"currency": "US"}, "ck_expenses_currency"),
     ({"description": " "}, "ck_expenses_description"),
@@ -84,7 +85,7 @@ def split_values(migrated_database, expense_values):
             "share_amount": Decimal("120.00")}
 
 
-@pytest.mark.parametrize("column", list(ExpenseSplit.__table__.c.keys()))
+@pytest.mark.parametrize("column", [c for c in ExpenseSplit.__table__.c.keys() if c != "weight"])
 def test_split_not_null(migrated_database, split_values, column):
     conn, _ = migrated_database
     with pytest.raises(IntegrityError) as error:
@@ -96,6 +97,7 @@ def test_split_not_null(migrated_database, split_values, column):
 @pytest.mark.parametrize("changes,constraint", [
     ({"share_amount": Decimal("-0.01")}, "ck_expense_splits_amount"),
     ({"share_amount": Decimal("NaN")}, "ck_expense_splits_amount"),
+    ({"weight": 0}, "ck_expense_splits_weight"),
     ({"expense_id": 2147483647}, "fk_expense_splits_expense"),
     ({"user_id": 2147483647}, "fk_expense_splits_user"),
 ])

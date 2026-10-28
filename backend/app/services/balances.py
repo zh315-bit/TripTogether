@@ -6,7 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models import Expense, ExpenseSplit, Trip, TripMember, User
-from app.schemas.balance import BalanceResponse, MemberBalance, SettlementSuggestion
+from app.schemas.balance import BalanceResponse, MemberBalance, SettlementSuggestion, SettlementSummary
 from app.services.trips import TripNotFoundError, accessible_to
 
 
@@ -18,8 +18,12 @@ class BalanceUnavailableError(Exception):
     pass
 
 
-def suggest_settlements(balances: Mapping[int, Decimal]) -> list[SettlementSuggestion]:
-    """Match initially sorted debts/credits; suggestions are not actual payments."""
+# Exact search is O(2^n * n) over members with a nonzero balance; beyond this
+# many it falls back to the greedy plan, which is still at most n - 1 transfers.
+MAX_EXACT_MEMBERS = 14
+
+
+def check_ledger(balances: Mapping[int, Decimal]) -> None:
     values = list(balances.values())
     if any(not isinstance(value, Decimal) or not value.is_finite()
            or value.as_tuple().exponent < -2 for value in values):
@@ -30,6 +34,15 @@ def suggest_settlements(balances: Mapping[int, Decimal]) -> list[SettlementSugge
                            + len(str(len(values))))
         if sum(values, Decimal("0.00")) != 0:
             raise InconsistentLedgerError()
+
+
+def greedy_settlements(balances: Mapping[int, Decimal]) -> list[SettlementSuggestion]:
+    """Pair the largest debt with the largest credit until everyone is settled.
+
+    A group of k members always settles in at most k - 1 transfers this way.
+    """
+    with localcontext() as context:
+        context.prec = 50
         debtors = sorted(
             [(user_id, -value) for user_id, value in balances.items() if value < 0],
             key=lambda pair: (-pair[1], pair[0]),
@@ -54,6 +67,63 @@ def suggest_settlements(balances: Mapping[int, Decimal]) -> list[SettlementSugge
             if credit == amount:
                 creditor_index += 1
         return result
+
+
+def zero_sum_groups(accounts: list[tuple[int, int]]) -> list[list[int]]:
+    """Partition nonzero balances (in cents) into the most zero-sum groups.
+
+    Each group of k members settles in k - 1 transfers, so the most groups
+    means the fewest transfers overall. dp[mask] is the best number of groups
+    for the members in mask, built by removing one member at a time; a mask
+    whose balances sum to zero closes a group. O(2^n * n) time and memory.
+    """
+    count = len(accounts)
+    size = 1 << count
+    sums = [0] * size
+    best = [0] * size
+    drop = [0] * size
+    for mask in range(1, size):
+        low = mask & -mask
+        sums[mask] = sums[mask ^ low] + accounts[low.bit_length() - 1][1]
+        best_value, choice, rest = -1, 0, mask
+        while rest:
+            bit = rest & -rest
+            rest ^= bit
+            if best[mask ^ bit] > best_value:
+                best_value, choice = best[mask ^ bit], bit.bit_length() - 1
+        best[mask] = best_value + (sums[mask] == 0)
+        drop[mask] = choice
+    groups: list[list[int]] = []
+    group: list[int] = []
+    mask = size - 1
+    while mask:
+        member = drop[mask]
+        group.append(accounts[member][0])
+        mask ^= 1 << member
+        if sums[mask] == 0:
+            groups.append(group)
+            group = []
+    return groups
+
+
+def plan_settlements(balances: Mapping[int, Decimal]) -> tuple[list[SettlementSuggestion], bool]:
+    """Suggest transfers that settle the ledger in the fewest steps we can find.
+
+    Returns the suggestions and whether the count is provably minimal. Suggestions
+    are not actual payments.
+    """
+    check_ledger(balances)
+    accounts = sorted((user_id, int(value.scaleb(2))) for user_id, value in balances.items() if value)
+    if len(accounts) > MAX_EXACT_MEMBERS:
+        return greedy_settlements(balances), False
+    result: list[SettlementSuggestion] = []
+    for group in sorted(zero_sum_groups(accounts), key=min):
+        result.extend(greedy_settlements({user_id: balances[user_id] for user_id in group}))
+    return result, True
+
+
+def suggest_settlements(balances: Mapping[int, Decimal]) -> list[SettlementSuggestion]:
+    return plan_settlements(balances)[0]
 
 
 def balance_query(trip_id: int, user_id: int):
@@ -120,10 +190,15 @@ def get_balances(db: Session, trip_id: int, user_id: int) -> BalanceResponse:
                 user_id=row.user_id, username=row.username,
                 paid=row.paid, share=row.share, balance=row.paid - row.share,
             ) for row in rows]
-            suggestions = suggest_settlements({m.user_id: m.balance for m in members})
+            balances = {m.user_id: m.balance for m in members}
+            suggestions, minimal = plan_settlements(balances)
         return BalanceResponse(
             trip_id=trip_id, currency=rows[0].currency,
             members=members, suggested_settlements=suggestions,
+            settlement=SettlementSummary(
+                transfers=len(suggestions), minimal=minimal,
+                unsettled_members=sum(1 for value in balances.values() if value),
+            ),
         )
     except SQLAlchemyError:
         db.rollback()

@@ -14,6 +14,7 @@ const balance = {
     { user_id: 3, username: 'Person3', paid: '33.33', share: '33.33', balance: '0.00' },
   ],
   suggested_settlements: [{ from_user_id: 2, to_user_id: 1, amount: '33.33' }],
+  settlement: { transfers: 1, unsettled_members: 2, minimal: true },
 }
 const json = (data: unknown) => new Response(JSON.stringify(data))
 
@@ -62,6 +63,7 @@ it('says when the member is square and links to everyone\'s balances', async () 
 it('explains the empty state before the first expense', async () => {
   mount(1, {
     ...balance, currency: null, suggested_settlements: [],
+    settlement: { transfers: 0, unsettled_members: 0, minimal: true },
     members: balance.members.map((member) => ({ ...member, paid: '0.00', share: '0.00', balance: '0.00' })),
   })
   expect(await screen.findByText(/No expenses yet\. Your share and balance appear here/)).toBeInTheDocument()

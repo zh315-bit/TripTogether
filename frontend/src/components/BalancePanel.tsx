@@ -52,6 +52,11 @@ export function BalancePanel({ tripId, refreshKey }: Props) {
           })}
         </div>
         <h3 className="subsection-title">Suggested settlements (not payments)</h3>
+        {balance.settlement.transfers > 0 && <p className="settlement-summary">
+          {balance.settlement.transfers} {balance.settlement.transfers === 1 ? 'transfer settles' : 'transfers settle'}{' '}
+          {balance.settlement.unsettled_members} members
+          {balance.settlement.minimal ? ', the fewest possible.' : '. The group is too large for an exact search, so this is a greedy plan.'}
+        </p>}
         {balance.suggested_settlements.length === 0
           ? <p className="muted-copy">No settlement suggestions.</p>
           : <div className="settlement-list">{balance.suggested_settlements.map((suggestion) => (
