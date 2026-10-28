@@ -97,6 +97,56 @@ describe('collaboration and itinerary UI', () => {
     await waitFor(() => expect(loadsAfterConflict).toBe(2))
   })
 
+  it('shows a moved row at once, keeps the server order, and puts it back if saving fails', async () => {
+    const second = { ...item, id: 10, title: 'Dinner', position: 2 }
+    let finish: (response: Response) => void = () => undefined
+    let fail = false
+    const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET'
+      if (url.endsWith('/health')) return json({ status: 'ok' })
+      if (url.endsWith('/me')) return json(user)
+      if (url.endsWith('/itinerary/reorder')) {
+        if (fail) return json({ error: { code: 'INTERNAL_ERROR', message: 'Could not save the order', details: [] } }, 500)
+        return new Promise<Response>((resolve) => { finish = resolve })
+      }
+      if (url.endsWith('/itinerary') && method === 'GET') return json([item, second])
+      if (url.endsWith('/api/v1/trips')) return json([trip])
+      if (url.endsWith('/trips/12')) return json(trip)
+      return json([])
+    })
+    const order = () => screen.getAllByRole('article').map((row) => row.querySelector('strong')?.textContent)
+    mount('/trips/12', fetcher)
+    await userEvent.click(await screen.findByRole('tab', { name: 'Itinerary' }))
+    expect(await screen.findByRole('button', { name: 'Drag Temple to reorder' })).toBeEnabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Move Temple down' }))
+    // Optimistic: the new order shows while the request is still open, and moves are locked.
+    expect(order()).toEqual(['Dinner', 'Temple'])
+    expect(screen.getByRole('button', { name: 'Drag Temple to reorder' })).toBeDisabled()
+    finish(json([{ ...second, position: 1 }, { ...item, position: 2 }]))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Drag Temple to reorder' })).toBeEnabled())
+    expect(order()).toEqual(['Dinner', 'Temple'])
+
+    fail = true
+    await userEvent.click(screen.getByRole('button', { name: 'Move Temple up' }))
+    expect(await screen.findByText('Could not save the order')).toBeInTheDocument()
+    expect(order()).toEqual(['Dinner', 'Temple'])
+  })
+
+  it('cannot drag the only item of a day', async () => {
+    const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET'
+      if (url.endsWith('/health')) return json({ status: 'ok' })
+      if (url.endsWith('/me')) return json(user)
+      if (url.endsWith('/itinerary') && method === 'GET') return json([item])
+      if (url.endsWith('/api/v1/trips')) return json([trip])
+      if (url.endsWith('/trips/12')) return json(trip)
+      return json([])
+    })
+    mount('/trips/12', fetcher)
+    await userEvent.click(await screen.findByRole('tab', { name: 'Itinerary' }))
+    expect(await screen.findByRole('button', { name: 'Drag Temple to reorder' })).toBeDisabled()
+  })
+
   it('links an itinerary item to a pool place, following the place name for location', async () => {
     const places = [
       { id: 1, trip_id: 12, proposed_by_user_id: 7, name: 'Senso-ji', address: null, latitude: 35.7,

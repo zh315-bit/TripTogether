@@ -1,5 +1,13 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, ReactNode } from 'react'
+import {
+  closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors,
+} from '@dnd-kit/core'
+import type { DragEndEvent } from '@dnd-kit/core'
+import {
+  arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { ApiError } from '../api/client'
 import {
   createItineraryItem, deleteItineraryItem, listItinerary, reorderItinerary, updateItineraryItem,
@@ -19,6 +27,28 @@ function LegDistance({ leg, previous, items }: { leg?: RouteLeg; previous?: Itin
   return <p className="itinerary-leg" title="Straight-line distance, not travel distance">
     <span aria-hidden="true">↓ </span>{km(leg.distance_km)}{from.id === previous?.id ? '' : ` from ${from.title}`}
   </p>
+}
+
+/** One draggable row; only the handle starts a drag, so buttons and links keep working. */
+function SortableRow({ id, title, disabled, className, onMouseEnter, onMouseLeave, children }: {
+  id: number
+  title: string
+  disabled: boolean
+  className: string
+  onMouseEnter?: () => void
+  onMouseLeave?: () => void
+  children: ReactNode
+}) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
+    useSortable({ id, disabled })
+  return <article ref={setNodeRef} className={`${className}${isDragging ? ' is-dragging' : ''}`}
+    style={{ transform: CSS.Translate.toString(transform), transition }}
+    onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+    <button ref={setActivatorNodeRef} className="drag-handle" type="button" disabled={disabled}
+      {...attributes} {...listeners} aria-label={`Drag ${title} to reorder`} title="Drag to reorder">
+      <span aria-hidden="true">⠿</span></button>
+    {children}
+  </article>
 }
 
 type Props = {
@@ -156,6 +186,14 @@ export function ItineraryPanel({
   const [editing, setEditing] = useState<ItineraryItem | null>(null)
   const [fetchedPlaces, setPlaces] = useState<TripPlace[]>([])
   const places = sharedPlaces ?? fetchedPlaces
+  // The day being dragged (its distance lines hide meanwhile) and a reorder in flight.
+  const [draggingDay, setDraggingDay] = useState<string | null>(null)
+  const [reordering, setReordering] = useState(false)
+  const sensors = useSensors(
+    // A few pixels of travel before a drag starts, so a click on the handle stays a click.
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
 
   const load = useCallback(async () => {
     setStatus('loading')
@@ -205,14 +243,19 @@ export function ItineraryPanel({
     }
   }
 
-  async function move(date: string, index: number, direction: -1 | 1) {
+  /** Moves one item within its day; both the arrow buttons and drag and drop end here. */
+  async function reorder(date: string, from: number, to: number) {
     const group = grouped.find(([day]) => day === date)?.[1] ?? []
-    const target = index + direction
-    if (target < 0 || target >= group.length) return
+    if (from === to || to < 0 || to >= group.length) return
     const shown = group.map((item) => item.id)
-    const ids = [...shown]
-    ;[ids[index], ids[target]] = [ids[target], ids[index]]
+    const ids = arrayMove(shown, from, to)
+    const before = items
+    // Show the new order at once, so a dropped row does not jump back while saving.
+    const moved = arrayMove(group, from, to).map((item, position) => ({ ...item, position: position + 1 }))
+    setItems((current) => [...current.filter((item) => item.date !== date), ...moved]
+      .sort((a, b) => a.date.localeCompare(b.date) || a.position - b.position))
     setMessage('')
+    setReordering(true)
     try {
       const updated = await reorderItinerary(request, String(trip.id), date, ids, shown)
       onChanged?.()
@@ -226,8 +269,20 @@ export function ItineraryPanel({
         onChanged?.()
         return
       }
+      setItems(before)
       setMessage(error instanceof ApiError ? error.message : 'Could not reorder itinerary.')
+    } finally {
+      setReordering(false)
     }
+  }
+
+  function drop(date: string, dayItems: ItineraryItem[], event: DragEndEvent) {
+    setDraggingDay(null)
+    const { active, over } = event
+    if (!over) return
+    const from = dayItems.findIndex((item) => item.id === active.id)
+    const to = dayItems.findIndex((item) => item.id === over.id)
+    if (from >= 0 && to >= 0) void reorder(date, from, to)
   }
 
   return (
@@ -247,11 +302,15 @@ export function ItineraryPanel({
             : onShowDay && <button className="place-link-button" type="button" onClick={() => onShowDay(date)}
               aria-label={`Show the route and distances for ${date}`}>Show distances</button>}
         </div>
+        <DndContext sensors={sensors} collisionDetection={closestCenter}
+          onDragStart={() => setDraggingDay(date)} onDragCancel={() => setDraggingDay(null)}
+          onDragEnd={(event) => drop(date, dayItems, event)}>
+        <SortableContext items={dayItems.map((item) => item.id)} strategy={verticalListSortingStrategy}>
         <div className="itinerary-list">
           {dayItems.map((item, index) => <Fragment key={item.id}>
-            {route?.date === date && <LegDistance leg={legsTo.get(item.id)} previous={dayItems[index - 1]}
-              items={dayItems} />}
-            <article
+            {route?.date === date && draggingDay !== date && <LegDistance leg={legsTo.get(item.id)}
+              previous={dayItems[index - 1]} items={dayItems} />}
+            <SortableRow id={item.id} title={item.title} disabled={reordering || dayItems.length < 2}
               className={`itinerary-row${item.place_id !== null && item.place_id === selectedPlaceId ? ' is-selected' : ''}`}
               onMouseEnter={item.place_id === null ? undefined : () => onHoverPlace?.(item.place_id)}
               onMouseLeave={item.place_id === null ? undefined : () => onHoverPlace?.(null)}>
@@ -265,14 +324,16 @@ export function ItineraryPanel({
                 {item.notes && <p className="muted-copy">{item.notes}</p>}
               </div>
               <div className="actions">
-                <button className="icon-button" type="button" title="Move item up" aria-label={`Move ${item.title} up`} disabled={index === 0} onClick={() => void move(date, index, -1)}>↑</button>
-                <button className="icon-button" type="button" title="Move item down" aria-label={`Move ${item.title} down`} disabled={index === dayItems.length - 1} onClick={() => void move(date, index, 1)}>↓</button>
+                <button className="icon-button" type="button" title="Move item up" aria-label={`Move ${item.title} up`} disabled={index === 0 || reordering} onClick={() => void reorder(date, index, index - 1)}>↑</button>
+                <button className="icon-button" type="button" title="Move item down" aria-label={`Move ${item.title} down`} disabled={index === dayItems.length - 1 || reordering} onClick={() => void reorder(date, index, index + 1)}>↓</button>
                 <button className="retry-button" type="button" onClick={() => setEditing(item)}>Edit</button>
                 <button className="danger-button" type="button" onClick={() => void remove(item)}>Delete</button>
               </div>
-            </article>
+            </SortableRow>
           </Fragment>)}
         </div>
+        </SortableContext>
+        </DndContext>
       </section>)}
       {editing ? <section className="trip-editor" aria-labelledby="edit-itinerary-title">
         <h3 id="edit-itinerary-title">Edit itinerary item</h3>

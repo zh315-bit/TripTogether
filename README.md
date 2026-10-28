@@ -14,7 +14,7 @@ This is a deployed portfolio MVP. The application deliberately keeps the domain 
 
 - Register and log in with JWT authentication.
 - Create, edit, delete, and join trips through invitations.
-- Maintain a shared, date-grouped itinerary with create, edit, delete, and reorder actions.
+- Maintain a shared, date-grouped itinerary with create, edit, delete, and reorder actions (drag and drop or arrow buttons).
 - Record exact-decimal expenses with equal splits.
 - View server-derived balances and suggested settlement transfers.
 - Use responsive pages with loading, empty, error, confirmation, and success feedback.
@@ -26,7 +26,7 @@ This is a deployed portfolio MVP. The application deliberately keeps the domain 
 
 ## Tech Stack
 
-**Frontend:** React, TypeScript, Vite, React Router, Vitest, Testing Library, ESLint.
+**Frontend:** React, TypeScript, Vite, React Router, Leaflet, dnd-kit, Vitest, Testing Library, ESLint.
 
 **Backend:** FastAPI, SQLAlchemy, PostgreSQL, Alembic, pytest, httpx.
 
@@ -258,6 +258,12 @@ shows the straight-line hop (for example "↓ 1.82 km"), naming the starting sto
 when an item without a place sits in between, and the day's total sits beside
 its date. Any other day has a *Show distances* link that makes it the route day
 on the map and in the list.
+
+Items are reordered within a day by dragging the grip on the left of a row
+(dnd-kit, with keyboard support); the up and down arrows remain. The new order
+shows as soon as the row is dropped, and is saved through the same guarded
+reorder request: if saving fails the row moves back, and if another member
+changed the day first the latest order is reloaded instead of retrying.
 
 The map frames the route day's stops rather than every place in the pool, so a
 day's route fills the view. A chip in the top-right corner reads like

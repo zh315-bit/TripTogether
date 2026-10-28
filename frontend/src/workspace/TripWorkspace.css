@@ -84,3 +84,10 @@
 .summary-transfers li { display: flex; justify-content: space-between; gap: 10px; padding: 10px 14px; border-radius: 12px; background: var(--surface-secondary); font-weight: 700; }
 .summary-link { grid-column: 1 / -1; justify-self: start; }
 .finance-summary-empty { margin: 0; padding: 14px; border: 1px dashed var(--border-strong); border-radius: 14px; }
+
+/* Drag to reorder: a grip on the left of each row; the arrows stay for keyboards. */
+.panel-body .itinerary-row { gap: 8px; }
+.drag-handle { display: grid; width: 22px; min-height: 32px; flex: 0 0 auto; place-items: center; margin-left: -6px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--ink-muted); font-size: 16px; cursor: grab; touch-action: none; }
+.drag-handle:hover:not(:disabled) { background: var(--surface-secondary); color: var(--ink); }
+.drag-handle:disabled { cursor: default; opacity: .35; }
+.itinerary-row.is-dragging { z-index: 2; border-radius: 12px; background: var(--surface); box-shadow: 0 10px 24px rgba(23, 35, 58, .18); cursor: grabbing; }
