@@ -537,6 +537,19 @@ describe('day route panel anchors', () => {
     expect(await screen.findByText('Where to first?')).toBeInTheDocument()
   })
 
+  it('names a member who just joined, even though they were not loaded yet', async () => {
+    let roster = members
+    const { fetcher, state } = server((url) => url.pathname.endsWith('/members') ? json(roster) : undefined)
+    await openMap(fetcher, 'Members')
+    expect(await screen.findByText('Live')).toBeInTheDocument()
+    expect(screen.queryByText('newcomer')).not.toBeInTheDocument()
+
+    roster = [...members, { user_id: 9, username: 'newcomer', email: 'new@example.com', role: 'member', joined_at: stamp }]
+    emit(state, 'member.joined', { entity: 'member', action: 'joined', actor_id: 9, entity_id: 9 })
+    expect(await screen.findByText('newcomer joined the trip.')).toBeInTheDocument()
+    expect(await screen.findByText('new@example.com')).toBeInTheDocument()
+  })
+
   it('reconnects after the server closes the stream and refetches everything', async () => {
     const { fetcher, state } = server()
     await openMap(fetcher)

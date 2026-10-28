@@ -20,7 +20,7 @@ A full-stack web app where a small group plans a trip on a shared map, keeps one
 - **Concurrency by design.** Writes serialise on the parent trip row (`SELECT … FOR UPDATE`), and every editable row carries a version: clients echo it in `If-Match`, and a stale edit gets a 412 with the newer version shown instead of a silent overwrite. Dedicated concurrency tests cover itinerary, membership, expenses and balances.
 - **Shared rate limiting for an external API.** Place search proxies Nominatim behind a single database-backed throttle row, so the one-request-per-second policy holds across every worker and instance.
 - **Production-shaped from day one.** `/ready` checks JWT config, database connectivity, the Alembic head and all core tables. Migrations are a controlled release step, not a boot side effect. CORS rejects non-HTTPS origins in production.
-- **Tested at every layer.** 300+ backend tests (unit, contract, migration, PostgreSQL integration, query-count audits, a live SSE stream under concurrent writes, settlement plans checked against brute force) and 180+ frontend tests (Vitest + Testing Library), all run in CI with a real PostgreSQL service.
+- **Tested at every layer.** 300+ backend tests (unit, contract, migration, PostgreSQL integration, query-count audits, a live SSE stream under concurrent writes, settlement plans checked against brute force) 180+ frontend tests (Vitest + Testing Library), and Playwright end-to-end tests that drive two real browsers through the live-collaboration and settlement flows, all run in CI with a real PostgreSQL service.
 
 ## Features
 
@@ -131,9 +131,12 @@ docker compose up --build
 cd backend && python -m pytest -q                        # unit + contract + migration tests
 cd backend && RUN_POSTGRES_TESTS=1 python -m pytest -q   # plus PostgreSQL integration tests
 cd frontend && npm test && npm run lint && npm run typecheck && npm run build
+cd frontend && npm run e2e                               # Playwright against the real stack
 ```
 
-CI ([ci.yml](.github/workflows/ci.yml)) runs both suites on every push and pull request, with the backend tests against a disposable PostgreSQL 16 service. The scripts in `frontend/scripts/verify_*.py` exercise the real API end to end with disposable users.
+The end-to-end suite ([frontend/e2e](frontend/e2e)) starts a migrated backend on port 8011 and the Vite dev server on 5175 by itself, then drives two real browsers through registration, trip creation and invitations, a live itinerary update with the stale-edit refusal, and a shares split settled with the fewest transfers. It needs `DATABASE_URL` and `JWT_SECRET_KEY`, from the environment or the repository `.env`, and `E2E_PYTHON` if your interpreter is not on the path as `python`.
+
+CI ([ci.yml](.github/workflows/ci.yml)) runs all three suites on every push and pull request: backend and frontend first, then the Playwright job against its own PostgreSQL 16 service, uploading the HTML report on failure. The scripts in `frontend/scripts/verify_*.py` exercise the real API end to end with disposable users.
 
 ## Engineering Notes
 
@@ -166,4 +169,4 @@ This is a deliberately small, deployed MVP. The main gaps, all documented in [do
 - One currency per trip, no percentages (use shares), no refresh tokens or password reset, unpaginated lists.
 - Public OSM tiles and Nominatim are for demos; real traffic needs a commercial or self-hosted provider.
 
-Planned next: Playwright end-to-end tests in CI, PostgreSQL `LISTEN/NOTIFY` so live updates survive scaling out, and settlement history (marking a suggested transfer as paid).
+Planned next: PostgreSQL `LISTEN/NOTIFY` so live updates survive scaling out, API rate limiting and request metrics, and settlement history (marking a suggested transfer as paid).

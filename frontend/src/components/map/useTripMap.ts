@@ -148,8 +148,11 @@ export function useTripMap(trip: Trip) {
     await loadRoute()
   }, [request, tripId, places, loadRoute])
 
+  /** Returns the fresh list too, so a "joined" notice can name a member who was not loaded yet. */
   const reloadMembers = useCallback(async () => {
-    setMembers(await listMembers(request, tripId).catch(() => members))
+    const next = await listMembers(request, tripId).catch(() => members)
+    setMembers(next)
+    return next
   }, [request, tripId, members])
 
   async function addResult(result: GeocodeResult): Promise<string> {
