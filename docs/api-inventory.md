@@ -164,6 +164,26 @@ occurred_at}`. A comment line every 20 seconds keeps proxies from closing the
 connection. A `resync` event (or a reconnect) means the client should refetch
 everything. `trip.deleted` ends the stream.
 
+## Split Methods and Settlement
+
+`ExpenseCreate`/`ExpenseUpdate` take `split_method` (`equal`, the default,
+`shares` or `exact`). `equal` uses `participant_user_ids`; `shares` and
+`exact` use `splits: [{user_id, weight}]` or `splits: [{user_id, amount}]`
+instead (sending both lists, or the wrong one for the method, is 422). Weights
+are integers from 1 to 1,000,000; exact amounts are decimal strings that must
+add up to `amount`. Shares are apportioned to whole cents with the
+largest-remainder method, ties to the lowest user id. `ExpenseResponse` carries
+`split_method` and each split's `weight` (null unless `shares`). A PATCH that
+changes only `amount` re-apportions `equal` and `shares` splits; for an `exact`
+split it needs new `splits` too (422 otherwise). Switching methods without
+`splits` keeps the participants (weights start at 1).
+
+`BalanceResponse.settlement` is `{transfers, unsettled_members, minimal}`.
+`suggested_settlements` is the fewest transfers found: an exact zero-sum
+partition search while at most 14 members have a nonzero balance
+(`minimal: true`), otherwise a greedy plan of at most n - 1 transfers
+(`minimal: false`).
+
 `TripResponse`, `ItineraryItemResponse`, `ExpenseResponse` and
 `TripPlaceResponse` carry an integer `version`, also returned as an `ETag`
 header on their detail and PATCH routes. A PATCH may send `If-Match: "<version>"`

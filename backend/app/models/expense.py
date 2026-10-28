@@ -14,6 +14,7 @@ class Expense(Base):
         CheckConstraint("amount > 0 AND amount <= 9999999999.99", name="ck_expenses_amount"),
         CheckConstraint("currency ~ '^[A-Z]{3}$'", name="ck_expenses_currency"),
         CheckConstraint("length(btrim(description)) > 0", name="ck_expenses_description"),
+        CheckConstraint("split_method IN ('equal', 'shares', 'exact')", name="ck_expenses_split_method"),
     )
 
     id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
@@ -29,6 +30,8 @@ class Expense(Base):
         nullable=False, index=True,
     )
     expense_date: Mapped[date] = mapped_column(Date, nullable=False)
+    # How the shares were derived: equal, by weight (`shares`) or typed in (`exact`).
+    split_method: Mapped[str] = mapped_column(String(6), nullable=False, server_default="equal")
     created_by_user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", name="fk_expenses_creator", ondelete="RESTRICT"),
         nullable=False, index=True,

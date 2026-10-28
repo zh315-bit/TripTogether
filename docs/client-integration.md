@@ -147,6 +147,14 @@ not three rounded33.33 values. Currency is a three-uppercase-letter code and
 one current-ledger currency per Trip; there is no FX conversion.
 An empty ledger returns currency null, zero member balances, no suggestions.
 
+Splits: send `split_method` with `participant_user_ids` for `equal`, or
+`splits` for `shares` (`{user_id, weight}`) and `exact` (`{user_id, amount}`).
+Exact amounts must add up to `amount`; the web form checks this in integer
+cents before sending, and the server rejects a mismatch with 422 naming both
+sums. Each returned split carries `weight` (null unless `shares`).
+`BalanceResponse.settlement` reports `transfers`, `unsettled_members` and
+`minimal`; show the suggestions as they are, they are already the fewest.
+
 ## Dates and PATCH
 
 - Trip dates, itinerary date and expense_date use `YYYY-MM-DD`; these are

@@ -30,7 +30,7 @@ function backend({ trips = [tokyo, paris], invitations = [] as unknown[], overri
     if (path.endsWith('/auth/me')) return json(user)
     if (path === '/api/v1/trips' && method === 'GET') return json(trips)
     if (path === '/api/v1/invitations') return json(invitations)
-    if (path.endsWith('/balances')) return json({ trip_id: 12, currency: null, members: [], suggested_settlements: [] })
+    if (path.endsWith('/balances')) return json({ trip_id: 12, currency: null, members: [], suggested_settlements: [], settlement: { transfers: 0, unsettled_members: 0, minimal: true } })
     if (path.endsWith('/itinerary/route')) {
       return json({ date: '2027-06-10', stops: [], legs: [], total_distance_km: 0, unlocated_item_ids: [] })
     }

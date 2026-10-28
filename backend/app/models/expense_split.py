@@ -1,4 +1,5 @@
 from decimal import Decimal
+from typing import Optional
 
 from sqlalchemy import CheckConstraint, ForeignKey, Identity, Integer, Numeric, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
@@ -14,6 +15,7 @@ class ExpenseSplit(Base):
             "share_amount >= 0 AND share_amount <= 9999999999.99",
             name="ck_expense_splits_amount",
         ),
+        CheckConstraint("weight IS NULL OR weight >= 1", name="ck_expense_splits_weight"),
     )
 
     id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
@@ -26,3 +28,5 @@ class ExpenseSplit(Base):
         nullable=False, index=True,
     )
     share_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    # Set only for `shares` splits; equal and exact splits carry no weight.
+    weight: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)

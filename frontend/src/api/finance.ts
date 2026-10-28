@@ -2,8 +2,10 @@ import { ApiError } from './client'
 import { ifMatch } from './trips'
 import type {
   AuthenticatedRequest, Balance, Expense, ExpenseInput, ExpenseSplit,
-  MemberBalance, SettlementSuggestion,
+  MemberBalance, SettlementSuggestion, SettlementSummary, SplitMethod,
 } from '../types/finance'
+
+const SPLIT_METHODS: readonly SplitMethod[] = ['equal', 'shares', 'exact']
 
 function object(body: unknown): Record<string, unknown> {
   if (typeof body !== 'object' || body === null) {
@@ -34,11 +36,19 @@ function money(value: unknown, field: string, signed = false): string {
   return result
 }
 
+function splitMethod(value: unknown): SplitMethod {
+  if (!SPLIT_METHODS.includes(value as SplitMethod)) {
+    throw new ApiError(200, 'INVALID_RESPONSE', 'Unexpected finance field: split_method.')
+  }
+  return value as SplitMethod
+}
+
 function parseSplit(body: unknown): ExpenseSplit {
   const value = object(body)
   return {
     user_id: number(value.user_id, 'user_id'),
     share_amount: money(value.share_amount, 'share_amount'),
+    weight: value.weight === null || value.weight === undefined ? null : number(value.weight, 'weight'),
   }
 }
 
@@ -55,6 +65,7 @@ function parseExpense(body: unknown): Expense {
     currency: text(value.currency, 'currency'),
     paid_by_user_id: number(value.paid_by_user_id, 'paid_by_user_id'),
     expense_date: text(value.expense_date, 'expense_date'),
+    split_method: splitMethod(value.split_method),
     created_by_user_id: number(value.created_by_user_id, 'created_by_user_id'),
     version: number(value.version, 'version'),
     created_at: text(value.created_at, 'created_at'),
@@ -83,6 +94,18 @@ function parseSettlement(body: unknown): SettlementSuggestion {
   }
 }
 
+function parseSettlementSummary(body: unknown): SettlementSummary {
+  const value = object(body)
+  if (typeof value.minimal !== 'boolean') {
+    throw new ApiError(200, 'INVALID_RESPONSE', 'Unexpected finance field: minimal.')
+  }
+  return {
+    transfers: number(value.transfers, 'transfers'),
+    unsettled_members: number(value.unsettled_members, 'unsettled_members'),
+    minimal: value.minimal,
+  }
+}
+
 function parseList<T>(body: unknown, parse: (value: unknown) => T, label: string): T[] {
   if (!Array.isArray(body)) {
     throw new ApiError(200, 'INVALID_RESPONSE', `Unexpected ${label} response.`)
@@ -100,6 +123,7 @@ function parseBalance(body: unknown): Balance {
     currency: value.currency === null ? null : text(value.currency, 'currency'),
     members: value.members.map(parseMemberBalance),
     suggested_settlements: value.suggested_settlements.map(parseSettlement),
+    settlement: parseSettlementSummary(value.settlement),
   }
 }
 

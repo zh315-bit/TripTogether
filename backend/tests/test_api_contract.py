@@ -212,7 +212,7 @@ def test_real_v1_client_workflow(registration_client, jwt_environment):
     assert invalid["details"][0]["loc"] == ["body", "amount"]
     balance = client.get(base + "/balances", headers=bh)
     assert balance.status_code == 200
-    assert set(balance.json()) == {"trip_id", "currency", "members", "suggested_settlements"}
+    assert set(balance.json()) == {"trip_id", "currency", "members", "suggested_settlements", "settlement"}
     assert [m["balance"] for m in balance.json()["members"]] == ["50.00", "-50.00"]
     assert sum(Decimal(m["balance"]) for m in balance.json()["members"]) == 0
     for response in (registered, trip_response, accepted, item, expense, balance):
