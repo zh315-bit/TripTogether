@@ -14,6 +14,12 @@ a claim that the service is production secure or feature complete.
 - Registration duplicate errors and inviting registered emails disclose account
   existence. Login uses one generic credential error and dummy hash verification,
   but this is not a formal constant-time or enumeration-proof guarantee.
+- Live updates default to an in-process broker. `REALTIME_BACKEND=postgres`
+  relays them through PostgreSQL LISTEN/NOTIFY so several API instances stay in
+  sync, but each instance then holds one permanent database connection, which
+  keeps a serverless database (Neon) from suspending; the single-instance Render
+  deployment keeps the default. Notifications are at-most-once: after a relay
+  reconnect, clients receive a `resync` and refetch rather than a replay.
 - Rate limiting covers login and registration only, as a fixed window per
   client address (burstier than a token bucket; up to 2x the rule at a window
   edge). Behind a proxy it trusts the first `X-Forwarded-For` address, which

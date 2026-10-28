@@ -186,7 +186,8 @@ that trip: `itinerary.created|updated|deleted|reordered`, `expense.*`,
 `{type, trip_id, entity, action, actor_id, entity_id?, version?, date?,
 occurred_at}`. A comment line every 20 seconds keeps proxies from closing the
 connection. A `resync` event (or a reconnect) means the client should refetch
-everything. `trip.deleted` ends the stream.
+everything, and the server also sends one when its PostgreSQL relay
+(`REALTIME_BACKEND=postgres`) reconnects. `trip.deleted` ends the stream.
 
 ## Split Methods and Settlement
 
