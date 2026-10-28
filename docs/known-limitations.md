@@ -14,7 +14,11 @@ a claim that the service is production secure or feature complete.
 - Registration duplicate errors and inviting registered emails disclose account
   existence. Login uses one generic credential error and dummy hash verification,
   but this is not a formal constant-time or enumeration-proof guarantee.
-- Rate limiting covers login and registration only, as a fixed window per
+- Refresh tokens live in `sessionStorage` on the web client, so a session
+  ends with the tab; there is no "remember me" cookie. Rotation detects a
+  replayed token and revokes that family, but cannot tell which party was
+  legitimate. Password reset needs SMTP; without it the route answers 503.
+- Rate limiting covers login, registration and password reset only, as a fixed window per
   client address (burstier than a token bucket; up to 2x the rule at a window
   edge). Behind a proxy it trusts the first `X-Forwarded-For` address, which
   is only sound when the proxy overwrites the header, as Render does. No

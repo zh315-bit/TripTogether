@@ -155,6 +155,20 @@ sums. Each returned split carries `weight` (null unless `shares`).
 `BalanceResponse.settlement` reports `transfers`, `unsettled_members` and
 `minimal`; show the suggestions as they are, they are already the fewest.
 
+## Sessions and password reset
+
+Keep both tokens from login. Send the access token as Bearer; when a request
+answers 401 (expiry), call `POST /auth/refresh` with the refresh token once,
+store the returned pair and retry. A 401 from `/auth/refresh` means the session
+is over: clear both tokens and show the login page. Call `POST /auth/logout`
+with the refresh token on sign-out. The web client keeps both in
+`sessionStorage`, so closing the tab ends the session on that device.
+
+Password reset: `POST /auth/password/forgot` with the email always answers
+202; the mailed link opens `/reset-password?token=…`, whose form posts
+`POST /auth/password/reset {token, password}`. A 400 `INVALID_RESET_TOKEN`
+means the link was used, replaced or expired: offer to send a new one.
+
 ## Rate limits and request ids
 
 Login and registration answer `429 RATE_LIMITED` with `Retry-After` (seconds)

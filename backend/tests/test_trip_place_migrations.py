@@ -266,7 +266,7 @@ def test_0006_round_trip_preserves_legacy_data(migrated_database, place_values):
     old_trip = conn.execute(text("SELECT * FROM trips")).one()
     old_user = conn.execute(select(User.__table__)).one()
     command.upgrade(config, "head")
-    assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0010"
+    assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0011"
     assert dict(conn.execute(text("SELECT * FROM itinerary_items")).mappings().one()) == {
         **old_item, "place_id": None, "version": 1,
     }

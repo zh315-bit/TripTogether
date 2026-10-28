@@ -45,7 +45,7 @@ is recipient identity, not a Trip role. Forbidden resources remain hidden404.
 
 ## Official Client API After Step 11
 
-36 documented operations: Auth3, Trips5, Members1, Invitations4, Itinerary8,
+40 documented operations: Auth7, Trips5, Members1, Invitations4, Itinerary8,
 Expenses5, Balances1, Places5, Geocoding1, Events1, System2. Counts are method/path pairs, not distinct URLs.
 All official success schemas retain their original fields. All listed errors
 use APIErrorResponse; generic unexpected500 and infrastructure503 can occur on
@@ -57,7 +57,11 @@ same envelope inside `/api/v1`.
 | GET | /health | No | Public | None | 200 HealthResponse | None |
 | GET | /ready | No | Public | None | 200 ReadinessResponse | 503 |
 | POST | /api/v1/auth/register | No | Public | UserRegister | 201 UserResponse | 409,422,429,503 |
-| POST | /api/v1/auth/login | No | Public | UserLogin | 200 TokenResponse | 401,422,429,503 |
+| POST | /api/v1/auth/login | No | Public | UserLogin | 200 TokenResponse (access + refresh) | 401,422,429,503 |
+| POST | /api/v1/auth/refresh | No | Public | RefreshRequest | 200 TokenResponse (rotated pair) | 401,422,429,503 |
+| POST | /api/v1/auth/logout | No | Public | RefreshRequest | 204 empty | 422,503 |
+| POST | /api/v1/auth/password/forgot | No | Public | ForgotPasswordRequest | 202 `{status: accepted}` | 422,429,503 |
+| POST | /api/v1/auth/password/reset | No | Public | ResetPasswordRequest | 204 empty | 400,422,429,503 |
 | GET | /api/v1/auth/me | JWT | Current user | None | 200 UserResponse | 401,503 |
 | POST | /api/v1/trips | JWT | Any user | TripCreate | 201 TripResponse | 401,422,503 |
 | GET | /api/v1/trips | JWT | Owned/joined only | None | 200 TripResponse[] | 401,503 |
@@ -138,8 +142,8 @@ Do not count preflight, automatic slash redirects or HEAD as new business APIs.
 
 | Status | Codes |
 | --- | --- |
-| 400 | BAD_REQUEST (fallback) |
-| 401 | INVALID_CREDENTIALS |
+| 400 | INVALID_RESET_TOKEN, BAD_REQUEST (fallback) |
+| 401 | INVALID_CREDENTIALS, INVALID_REFRESH_TOKEN |
 | 403 | FORBIDDEN (fallback; resource policy currently uses404) |
 | 404 | TRIP_NOT_FOUND, INVITATION_NOT_FOUND, INVITEE_NOT_FOUND, ITINERARY_NOT_FOUND, EXPENSE_NOT_FOUND, NOT_FOUND |
 | 405 | METHOD_NOT_ALLOWED |
@@ -147,12 +151,28 @@ Do not count preflight, automatic slash redirects or HEAD as new business APIs.
 | 422 | VALIDATION_ERROR |
 | 429 | RATE_LIMITED (`Retry-After` seconds), GEOCODER_BUSY |
 | 500 | INTERNAL_ERROR |
-| 503 | RATE_LIMITER_UNAVAILABLE, REGISTRATION_UNAVAILABLE, AUTHENTICATION_UNAVAILABLE, TRIPS_UNAVAILABLE, INVITATIONS_UNAVAILABLE, ITINERARY_UNAVAILABLE, EXPENSES_UNAVAILABLE, BALANCES_UNAVAILABLE, DATABASE_UNAVAILABLE, NOT_READY, SERVICE_UNAVAILABLE (fallback) |
+| 503 | PASSWORD_RESET_UNAVAILABLE, RATE_LIMITER_UNAVAILABLE, REGISTRATION_UNAVAILABLE, AUTHENTICATION_UNAVAILABLE, TRIPS_UNAVAILABLE, INVITATIONS_UNAVAILABLE, ITINERARY_UNAVAILABLE, EXPENSES_UNAVAILABLE, BALANCES_UNAVAILABLE, DATABASE_UNAVAILABLE, NOT_READY, SERVICE_UNAVAILABLE (fallback) |
 
 Codes are assigned at business raise sites, not inferred from English strings.
 Validation uses one stable code with useful field details rather than a giant
 code enumeration. See client-integration.md for complete envelope examples.
 Never change a client-facing code casually without checking contract consumers.
+
+## Sessions and Password Reset
+
+Login returns an access token (JWT, 30 minutes) and an opaque `refresh_token`
+(30 days by default, `REFRESH_TOKEN_EXPIRE_DAYS`). `POST /auth/refresh`
+exchanges a live refresh token for a new pair and spends the presented one;
+presenting a spent token again is treated as theft and revokes the whole
+family (every rotation of that sign-in), answering `401 INVALID_REFRESH_TOKEN`.
+`POST /auth/logout` revokes the family. Only SHA-256 hashes of these tokens
+are stored.
+
+`POST /auth/password/forgot` always answers 202; when the address is
+registered a one-hour, single-use link is mailed (`MAIL_BACKEND=smtp`, or
+written to the log in development). `POST /auth/password/reset` sets the new
+password, spends the link and signs the account out everywhere. Both routes
+share `RATE_LIMIT_RESET` (default 5 per 60 s per client).
 
 ## Rate Limits, Pagination and Request IDs
 

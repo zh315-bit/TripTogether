@@ -33,7 +33,7 @@ def test_money_metadata():
 
 def test_0005_round_trip(migrated_database, expense_values):
     conn, config = migrated_database
-    assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0010"
+    assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0011"
     command.check(config)
     command.downgrade(config, "0004")
     assert "expenses" not in inspect(conn).get_table_names()

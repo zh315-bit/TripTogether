@@ -13,7 +13,7 @@ from app.db.session import get_engine, get_session_factory
 CORE_TABLES = frozenset({
     "users", "trips", "trip_members", "trip_invitations",
     "itinerary_items", "expenses", "expense_splits", "trip_places",
-    "geocoder_throttle",
+    "geocoder_throttle", "auth_tokens",
 })
 
 

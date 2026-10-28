@@ -37,7 +37,7 @@ def test_register_login_and_current_user(registered_user, jwt_environment):
     assert response.status_code == 200
     assert response.headers["Cache-Control"] == "no-store"
     data = response.json()
-    assert set(data) == {"access_token", "token_type"}
+    assert set(data) == {"access_token", "token_type", "refresh_token"}
     assert data["token_type"] == "bearer"
     claims = jwt.decode(data["access_token"], jwt_environment, algorithms=["HS256"])
     assert set(claims) == {"sub", "exp"}

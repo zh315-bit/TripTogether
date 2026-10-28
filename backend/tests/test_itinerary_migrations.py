@@ -42,7 +42,7 @@ def test_0004_round_trip(migrated_database, item_values):
     columns = {c["name"]: c for c in inspect(conn).get_columns("itinerary_items")}
     assert columns["id"]["identity"]
     assert len(columns) == 14
-    assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0010"
+    assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0011"
     command.downgrade(config, "0003")
     assert "itinerary_items" not in inspect(conn).get_table_names()
     assert conn.scalar(select(Trip.id)) == item_values["trip_id"]

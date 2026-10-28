@@ -19,7 +19,7 @@ A full-stack web app where a small group plans a trip on a shared map, keeps one
 - **Live collaboration.** Every committed change is pushed to the other members over Server-Sent Events; their lists refresh in place with a one-line notice ("Jonas changed an itinerary item"). Events are staged inside the transaction and published only after commit, so a client never refetches a change that rolled back. A dropped stream reconnects with backoff and triggers a full resync.
 - **Concurrency by design.** Writes serialise on the parent trip row (`SELECT … FOR UPDATE`), and every editable row carries a version: clients echo it in `If-Match`, and a stale edit gets a 412 with the newer version shown instead of a silent overwrite. Dedicated concurrency tests cover itinerary, membership, expenses and balances.
 - **Shared rate limiting for an external API.** Place search proxies Nominatim behind a single database-backed throttle row, so the one-request-per-second policy holds across every worker and instance.
-- **Production-shaped from day one.** `/ready` checks JWT config, database connectivity, the Alembic head and all core tables. Migrations are a controlled release step, not a boot side effect. CORS rejects non-HTTPS origins in production. Login and registration are rate limited per client with a PostgreSQL-backed window that holds across instances; every response carries an `X-Request-ID` that is also on each JSON log line, and list routes page with `limit`/`offset` plus `X-Total-Count`.
+- **Production-shaped from day one.** `/ready` checks JWT config, database connectivity, the Alembic head and all core tables. Migrations are a controlled release step, not a boot side effect. CORS rejects non-HTTPS origins in production. Sessions use short-lived JWTs plus rotating, single-use refresh tokens with replay detection, and password reset works through single-use mailed links. Login, registration and reset are rate limited per client with a PostgreSQL-backed window that holds across instances; every response carries an `X-Request-ID` that is also on each JSON log line, and list routes page with `limit`/`offset` plus `X-Total-Count`.
 - **Tested at every layer.** 300+ backend tests (unit, contract, migration, PostgreSQL integration, query-count audits, a live SSE stream under concurrent writes, settlement plans checked against brute force) 180+ frontend tests (Vitest + Testing Library), and Playwright end-to-end tests that drive two real browsers through the live-collaboration and settlement flows, all run in CI with a real PostgreSQL service.
 
 ## Features
@@ -167,7 +167,7 @@ The step-by-step runbook, environment variable matrix, schema release procedure 
 This is a deliberately small, deployed MVP. The main gaps, all documented in [docs/known-limitations.md](docs/known-limitations.md):
 
 - Live updates fan out inside one API instance; running several instances needs a shared channel behind the broker. Clients that omit `If-Match` still get last-write-wins.
-- One currency per trip, no percentages (use shares), no refresh tokens or password reset, unpaginated lists.
+- One currency per trip, no percentages (use shares); sessions end with the browser tab (no "remember me" cookie).
 - Public OSM tiles and Nominatim are for demos; real traffic needs a commercial or self-hosted provider.
 
-Planned next: PostgreSQL `LISTEN/NOTIFY` so live updates survive scaling out, paging in the web client once trips outgrow one screen, and settlement history (marking a suggested transfer as paid).
+Planned next: paging in the web client once trips outgrow one screen, settlement history (marking a suggested transfer as paid), and a "remember me" cookie session.
