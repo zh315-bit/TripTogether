@@ -24,7 +24,7 @@ def read(context, actor="alice"):
     final = {m["user_id"]: Decimal(m["balance"]) for m in result["members"]}
     assert sum(final.values(), Decimal(0)) == 0
     for member in result["members"]:
-        assert set(member) == {"user_id", "username", "paid", "share", "balance"}
+        assert set(member) == {"user_id", "username", "paid", "share", "settled", "balance"}
         for key in ("paid", "share", "balance"):
             assert isinstance(member[key], str)
             assert member[key] == format(Decimal(member[key]), ".2f")

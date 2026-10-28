@@ -44,8 +44,8 @@ def test_openapi_is_complete_and_unique():
         assert client.get("/docs").status_code == 200
     operations = [(path, method, operation) for path, methods in spec["paths"].items()
                   for method, operation in methods.items()]
-    assert len(operations) == 40
-    assert sum(path.startswith(PREFIX + "/") for path, _, _ in operations) == 38
+    assert len(operations) == 43
+    assert sum(path.startswith(PREFIX + "/") for path, _, _ in operations) == 41
     ids = [op["operationId"] for _, _, op in operations]
     assert len(ids) == len(set(ids))
     assert set(spec["paths"]) >= {
@@ -99,7 +99,7 @@ def test_every_protected_v1_operation_rejects_anonymous_before_database():
                         error_contract(response, 401, "INVALID_CREDENTIALS")
                         assert response.headers["www-authenticate"] == "Bearer"
                         checked += 1
-            assert checked == 32
+            assert checked == 35
     finally:
         app.dependency_overrides.pop(get_db, None)
 

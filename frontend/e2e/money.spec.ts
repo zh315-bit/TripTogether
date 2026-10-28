@@ -64,7 +64,7 @@ test('five members settle in three transfers, not four', async ({ browser, reque
   // Group order follows user ids, which registration hands out in any order.
   const rows = page.locator('.settlement-row')
   await expect(rows).toHaveCount(3)
-  const texts = (await rows.allTextContents()).map((text) => text.replace(/\s*—\s*/g, ' — ').replace(/\s+/g, ' ').trim()).sort()
+  const texts = (await rows.allTextContents()).map((text) => text.replace(/Mark as paid/g, '').replace(/\s*—\s*/g, ' — ').replace(/\s+/g, ' ').trim()).sort()
   expect(texts).toEqual([
     `${aiko.username} → ${mika.username} — 30.00 USD`,
     `${ben.username} → ${mika.username} — 30.00 USD`,

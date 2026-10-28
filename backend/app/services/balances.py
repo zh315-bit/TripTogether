@@ -5,7 +5,7 @@ from sqlalchemy import func, select, true
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.models import Expense, ExpenseSplit, Trip, TripMember, User
+from app.models import Expense, ExpenseSplit, Settlement, Trip, TripMember, User
 from app.schemas.balance import BalanceResponse, MemberBalance, SettlementSuggestion, SettlementSummary
 from app.services.trips import TripNotFoundError, accessible_to
 
@@ -158,20 +158,32 @@ def balance_query(trip_id: int, user_id: int):
     ).select_from(expenses.outerjoin(
         split_totals, split_totals.c.expense_id == expenses.c.id,
     )).cte("balance_audit")
+    # Recorded payments move money between members without touching expenses.
+    payments = select(Settlement.from_user_id, Settlement.to_user_id, Settlement.amount).join(
+        scope, Settlement.trip_id == scope.c.id).cte("balance_payments")
+    settled_out = select(payments.c.from_user_id.label("user_id"), func.sum(payments.c.amount).label("total")
+                         ).group_by(payments.c.from_user_id).cte("balance_settled_out")
+    settled_in = select(payments.c.to_user_id.label("user_id"), func.sum(payments.c.amount).label("total")
+                        ).group_by(payments.c.to_user_id).cte("balance_settled_in")
     # Include financial identities too: never silently discard a former participant.
     identities = select(participants.c.user_id).union(
         select(paid.c.user_id), select(shares.c.user_id),
+        select(settled_out.c.user_id), select(settled_in.c.user_id),
     ).cte("balance_identities")
     return select(
         identities.c.user_id, User.username,
         participants.c.user_id.is_not(None).label("is_participant"),
         func.coalesce(paid.c.paid, Decimal("0.00")).label("paid"),
         func.coalesce(shares.c.share, Decimal("0.00")).label("share"),
+        (func.coalesce(settled_out.c.total, Decimal("0.00"))
+         - func.coalesce(settled_in.c.total, Decimal("0.00"))).label("settled"),
         audit.c.currency, audit.c.currency_count, audit.c.invalid_expenses,
     ).select_from(identities).join(User, User.id == identities.c.user_id).outerjoin(
         participants, participants.c.user_id == identities.c.user_id,
     ).outerjoin(paid, paid.c.user_id == identities.c.user_id).outerjoin(
         shares, shares.c.user_id == identities.c.user_id,
+    ).outerjoin(settled_out, settled_out.c.user_id == identities.c.user_id).outerjoin(
+        settled_in, settled_in.c.user_id == identities.c.user_id,
     ).join(audit, true()).order_by(identities.c.user_id)
 
 
@@ -188,7 +200,8 @@ def get_balances(db: Session, trip_id: int, user_id: int) -> BalanceResponse:
             context.prec = 50
             members = [MemberBalance(
                 user_id=row.user_id, username=row.username,
-                paid=row.paid, share=row.share, balance=row.paid - row.share,
+                paid=row.paid, share=row.share, settled=row.settled,
+                balance=row.paid - row.share + row.settled,
             ) for row in rows]
             balances = {m.user_id: m.balance for m in members}
             suggestions, minimal = plan_settlements(balances)

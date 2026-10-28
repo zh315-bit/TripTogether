@@ -10,6 +10,9 @@ class MemberBalance(BaseModel):
     username: str
     paid: MoneyResponse
     share: MoneyResponse
+    # Net of recorded payments: positive when the member paid others more than received.
+    settled: MoneyResponse
+    # paid - share + settled: positive is owed money, negative owes.
     balance: MoneyResponse
 
 

@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger("triptogether")
 
-Entity = Literal["trip", "itinerary", "expense", "place", "member"]
+Entity = Literal["trip", "itinerary", "expense", "place", "member", "settlement"]
 Action = Literal["created", "updated", "deleted", "reordered", "joined"]
 
 # A slow consumer is told to resync rather than allowed to grow without bound.

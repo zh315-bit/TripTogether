@@ -56,6 +56,7 @@ function describe(event: TripEvent, who: string): string | null {
         : `${who} ${verb} an itinerary item.`
     case 'place': return `${who} ${verb} a place.`
     case 'expense': return `${who} ${verb} an expense.`
+    case 'settlement': return `${who} ${event.action === 'deleted' ? 'removed a recorded payment' : 'recorded a payment'}.`
     case 'member': return `${who} joined the trip.`
     case 'trip': return event.action === 'deleted' ? null : `${who} changed the trip details.`
     default: return null
@@ -101,7 +102,8 @@ export default function TripWorkspace({ trip, owner, onTripUpdated, onTripDelete
     switch (event.entity) {
       case 'itinerary': void map.syncItinerary(); break
       case 'place': void map.reloadPlaces(); break
-      case 'expense': bumpFinance(); break
+      case 'expense':
+      case 'settlement': bumpFinance(); break
       case 'member':
         // The actor may be the new member, so name them from the refreshed list.
         setMemberKey((key) => key + 1)
@@ -216,7 +218,7 @@ export default function TripWorkspace({ trip, owner, onTripUpdated, onTripDelete
             <FinanceSummary tripId={String(trip.id)} refreshKey={balanceKey} onOpenBalances={() => choose('balances')} />
             <ExpensePanel tripId={String(trip.id)} refreshKey={expenseKey} onChanged={() => setBalanceKey((key) => key + 1)} />
           </>}
-          {panel === 'balances' && <BalancePanel tripId={String(trip.id)} refreshKey={balanceKey} />}
+          {panel === 'balances' && <BalancePanel tripId={String(trip.id)} refreshKey={balanceKey} onChanged={() => setBalanceKey((key) => key + 1)} />}
           {panel === 'members' && <MembersPanel tripId={String(trip.id)} owner={owner} refreshKey={memberKey} />}
           {panel === 'settings' && <TripSettings trip={trip} owner={owner}
             onUpdated={onTripUpdated} onDeleted={onTripDeleted} />}
