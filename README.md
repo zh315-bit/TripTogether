@@ -1,260 +1,152 @@
 # TripTogether
 
-> A collaborative travel planning web application for shared itineraries, group expenses, and settlement tracking.
+[![CI](https://github.com/zh315-bit/TripTogether/actions/workflows/ci.yml/badge.svg)](https://github.com/zh315-bit/TripTogether/actions/workflows/ci.yml)
+[![Live demo](https://img.shields.io/badge/demo-live-2ea44f)](https://trip-together-zeta.vercel.app)
+[![API](https://img.shields.io/badge/api-FastAPI-009688)](https://triptogether-api.onrender.com/health)
 
-TripTogether is a full-stack collaborative travel-planning application for small groups. It keeps a trip's people, itinerary, shared expenses, balances, and settlement suggestions in one workspace.
+**Plan together, travel together, settle fairly.**
+A full-stack web app where a small group plans a trip on a shared map, keeps one itinerary, records expenses, and gets exact settlement suggestions.
 
-## Overview
+**Live demo:** <https://trip-together-zeta.vercel.app> · **API health:** <https://triptogether-api.onrender.com/health>
 
-This is a deployed portfolio MVP. The application deliberately keeps the domain small: plan together, travel together, and settle fairly.
+![TripTogether map workspace: trip switcher, sidebar tools, member-coloured places and the day's route](docs/screenshots/workspace-desktop.jpg)
 
-**Live Demo:** [TripTogether](https://trip-together-zeta.vercel.app) · [API health](https://triptogether-api.onrender.com/health)
+## Highlights
+
+- **Map-first collaboration.** Members search or pin candidate places (colour-coded per person), link them to itinerary items, and see each day's route with stop-to-stop distances. A route optimiser (nearest neighbour + 2-opt, seeded from every start) proposes a shorter visiting order and detects conflicts before applying it.
+- **Money you can trust.** Amounts are `Numeric(12, 2)` end to end. Equal splits are computed once on the server with a deterministic remainder rule; the browser renders exact decimal strings and never does money arithmetic.
+- **Concurrency by design.** Writes serialise on the parent trip row (`SELECT … FOR UPDATE`), so reorders, invitations and splits keep their invariants under concurrent members. Dedicated concurrency tests cover itinerary, membership, expenses and balances.
+- **Shared rate limiting for an external API.** Place search proxies Nominatim behind a single database-backed throttle row, so the one-request-per-second policy holds across every worker and instance.
+- **Production-shaped from day one.** `/ready` checks JWT config, database connectivity, the Alembic head and all core tables. Migrations are a controlled release step, not a boot side effect. CORS rejects non-HTTPS origins in production.
+- **Tested at every layer.** 270+ backend tests (unit, contract, migration, PostgreSQL integration, query-count audits) and 110+ frontend tests (Vitest + Testing Library), all run in CI with a real PostgreSQL service.
 
 ## Features
 
-- Register and log in with JWT authentication.
-- Create, edit, delete, and join trips through invitations.
-- Maintain a shared, date-grouped itinerary with create, edit, delete, and reorder actions.
-- Record exact-decimal expenses with equal splits.
-- View server-derived balances and suggested settlement transfers.
-- Use responsive pages with loading, empty, error, confirmation, and success feedback.
-- Plan on a shared map: search or pin candidate places (colour-coded per member), link them to itinerary items, view each day's straight-line route, and apply a suggested shorter visiting order with conflict detection.
-
-## Tech Stack
-
-**Frontend:** React, TypeScript, Vite, React Router, Vitest, Testing Library, ESLint.
-
-**Backend:** FastAPI, SQLAlchemy, PostgreSQL, Alembic, pytest, httpx.
-
-**Authentication:** JWT and Argon2id password hashing.
-
-**Deployment:** Vercel (frontend), Render (FastAPI), and Render PostgreSQL.
+| Area | What you can do |
+| --- | --- |
+| Trips & members | Register (Argon2id), sign in (JWT), create trips, invite registered users, accept or reject invitations |
+| Itinerary | Date-grouped items with create, edit, delete and drag-and-drop reorder (dnd-kit, keyboard accessible) |
+| Map | Search or pin places, add a pool place to any day in one click, link them to items, select from list or map with two-way highlight, frame the selected day, apply a suggested shorter order |
+| Expenses | Exact-decimal expenses with equal splits, per-member summary ("You owe", "You paid", "Your share") |
+| Balances | Server-derived balances and suggested transfers to settle the trip |
+| UX | Responsive map workspace (sidebar on desktop, bottom sheet on phones), loading/empty/error states, in-page confirmations |
 
 ## Architecture
 
-```text
-React SPA → REST API → FastAPI → Service Layer → SQLAlchemy → PostgreSQL
+```mermaid
+flowchart LR
+    B[React SPA<br/>TypeScript · Vite · Leaflet] -->|REST /api/v1| A[FastAPI routers]
+    A --> S[Service layer<br/>trips · itinerary · expenses · balances · routing · geocoding]
+    S --> O[SQLAlchemy 2.0]
+    O --> P[(PostgreSQL<br/>Alembic migrations)]
+    S -->|throttled proxy| N[Nominatim geocoder]
+    B -->|tiles| T[OpenStreetMap tiles]
 ```
 
-The browser renders backend-provided exact monetary strings; it never recomputes equal splits or balances.
+- **Routers** validate input with Pydantic and map domain errors to a uniform JSON error contract.
+- **Services** own all business rules: authorisation checks, split arithmetic, balance aggregation, route optimisation and the geocoder throttle. Routers never touch the ORM directly.
+- **Models and migrations** are versioned with Alembic (seven revisions); readiness fails until the database matches the application's single head.
+- **Frontend** keeps a centralised API client and auth context, typed contracts mirroring the backend schemas, and a lazily loaded workspace chunk so public pages stay light.
 
-## Core Workflow
+Detailed references: [API inventory](docs/api-inventory.md) · [Authorization matrix](docs/authorization-matrix.md) · [Client integration guide](docs/client-integration.md)
 
-Create Trip → Invite Members → Shared Itinerary → Track Expenses → Calculate Balances → Settlement Suggestions
+## Tech Stack
 
-## Local Development
+| Layer | Choices |
+| --- | --- |
+| Frontend | React 19, TypeScript, Vite, React Router 7, Leaflet, dnd-kit, Vitest, Testing Library, ESLint |
+| Backend | Python, FastAPI, Pydantic v2, SQLAlchemy 2.0, Alembic, psycopg 3, httpx, pytest |
+| Auth | JWT (PyJWT) with Argon2id password hashing |
+| Infra | PostgreSQL 15+, Docker Compose, GitHub Actions, Vercel (SPA), Render (API), Neon (database) |
 
-Requirements: Python 3.9+, Node 24 LTS, npm, and a running PostgreSQL instance.
+## Screenshots
+
+| Day route with distances | Optimiser preview |
+| --- | --- |
+| ![Day route on the map with straight-line distances](docs/screenshots/map-desktop-route.jpg) | ![Suggested shorter order shown as a dashed preview](docs/screenshots/map-desktop-optimize-preview.jpg) |
+
+| Place detail card | Conflict detected before applying |
+| --- | --- |
+| ![Selected place ringed on the map with its detail card](docs/screenshots/workspace-place-detail.jpg) | ![Conflict message when another member changed the day first](docs/screenshots/map-desktop-conflict.jpg) |
+
+<details>
+<summary>More: landing page and phone layout</summary>
+
+![Landing page](docs/screenshots/landing-travel.jpg)
+
+| Map with the sheet collapsed | Itinerary in the bottom sheet | Optimiser on a phone |
+| --- | --- | --- |
+| ![Phone: full-screen map](docs/screenshots/workspace-mobile-peek.jpg) | ![Phone: itinerary panel raised](docs/screenshots/workspace-mobile-sheet.jpg) | ![Phone: optimiser preview](docs/screenshots/map-mobile-optimize-preview.jpg) |
+
+</details>
+
+## Quick Start
+
+Requirements: Python 3.9+, Node 24, npm, and a running PostgreSQL instance.
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+# backend
+python3 -m venv .venv && source .venv/bin/activate
 python -m pip install -r backend/requirements.txt
-cp -n .env.example .env
+cp -n .env.example .env            # set DATABASE_URL and a strong JWT_SECRET_KEY
 cd backend
 python -m alembic upgrade head
 CORS_ORIGINS='["http://127.0.0.1:5173","http://localhost:5173"]' python -m uvicorn app.main:app --reload
 ```
 
-In a second terminal:
-
 ```bash
+# frontend, in a second terminal
 cd frontend
 npm ci
-cp -n .env.example .env
+cp -n .env.example .env            # VITE_API_BASE_URL=http://127.0.0.1:8000
 npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
 ```
 
-Open `http://127.0.0.1:5173`.
+Open <http://127.0.0.1:5173>. Interactive API docs are at <http://127.0.0.1:8000/docs>.
 
-## Environment Variables
-
-The root `.env` configures the server: `DATABASE_URL`, `JWT_SECRET_KEY`, `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `APP_ENV`, `CORS_ORIGINS`, and the optional `GEOCODER_*` place-search settings. Use a strong local JWT key and never commit it.
-
-`frontend/.env.example` contains only `VITE_API_BASE_URL`. All `VITE_*` values are bundled for the browser and are public configuration. Do not put database URLs, passwords, or JWT signing secrets there.
-
-## Deployment
-
-TripTogether is deployed with a static frontend build, a non-reloading FastAPI process, and hosted PostgreSQL. The browser calls the backend's public HTTPS origin; the backend connects to PostgreSQL through its private connection string. The project owner confirmed production registration after migration to `0005 (head)`; the collaborative-map release requires `0007 (head)` and PostgreSQL 15+ (see the [schema release procedure](docs/step20-production-deployment.md#releasing-a-schema-change-render-free--auto-deploy)).
-
-```text
-Browser → static frontend → public HTTPS API → hosted PostgreSQL
-```
-
-Development uses `npm run dev`, `uvicorn --reload`, and a local PostgreSQL instance. Production uses `npm run build`, a static web server, `uvicorn app.main:app --host 0.0.0.0 --port "$PORT"` without `--reload`, and hosted PostgreSQL. A production frontend must be rebuilt whenever `VITE_API_BASE_URL` changes because Vite embeds it in the generated browser bundle.
-
-### Production Environment Variables
-
-| Variable | Used by | Production requirement |
-| --- | --- | --- |
-| `DATABASE_URL` | Backend | PostgreSQL `postgresql+psycopg://...` URL supplied by the host/provider. |
-| `JWT_SECRET_KEY` | Backend | Unique secret of at least 32 bytes; never use the example placeholder. |
-| `JWT_ALGORITHM` | Backend | `HS256`. |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | Backend | Integer between 1 and 1440; current project variable name. |
-| `APP_ENV` | Backend | `production`, which validates database and JWT configuration on startup. |
-| `CORS_ORIGINS` | Backend | JSON array of exact HTTPS frontend origins, with no trailing slash. |
-| `GEOCODER_PROVIDER` | Backend | `disabled` (default) or `nominatim`; `fake` is rejected in production. Set `disabled` and restart to turn search off. |
-| `GEOCODER_USER_AGENT` | Backend | Required for `nominatim`: application name plus contact, per the [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/). |
-| `GEOCODER_BASE_URL` | Backend | HTTPS origin; defaults to the public Nominatim service. |
-| `VITE_API_BASE_URL` | Frontend build | Public HTTPS backend origin only; it is safe to expose but must not contain credentials. |
-| `VITE_MAP_TILE_URL` | Frontend build | Optional HTTPS tile template. The default public OSM tiles are for development and light demos only; use a commercial or self-hosted tile service for real traffic. |
-| `VITE_MAP_TILE_ATTRIBUTION` | Frontend build | Required with a custom `VITE_MAP_TILE_URL`: the provider's credit as plain text (HTML is escaped). Without it the map falls back to OSM tiles and credit. |
-
-Keep these values in the deployment platform's secret/configuration store. `.env` is local-only and ignored by Git; `.env.example` and `frontend/.env.example` contain placeholders only.
-
-### Migration and Startup Strategy
-
-Run `alembic upgrade head` once as a controlled release step for a new database
-or schema update, before validating business traffic. Do not let every backend
-replica run migrations on boot. On a Render plan with a Pre-Deploy Command, use
-it as one controlled migration step. Render Free has no Pre-Deploy Command, so
-run the migration manually from a trusted environment with the Render database
-URL supplied as an environment variable. Verify `alembic current` reports
-`0007 (head)` for this release. Never put the URL in a committed file or shell
-history. After migration succeeds, start the API without reload:
+**Docker Compose** runs the same stack as non-reloading production processes (PostgreSQL, a one-shot migration job, the API, and the built SPA behind Nginx):
 
 ```bash
-cd backend
-APP_ENV=production python -m alembic upgrade head
-APP_ENV=production /path/to/venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
-```
-
-`/health` is a liveness endpoint and never accesses the database. `/ready`
-validates JWT configuration, PostgreSQL connectivity, that the database
-revision matches the application's single Alembic head, and that all nine
-core tables exist. It returns 503 until every check passes; use it for
-readiness checks after the controlled migration finishes.
-
-### CORS
-
-Never use a wildcard origin for production. Configure the exact deployed frontend URL, for example:
-
-```bash
-CORS_ORIGINS='["https://app.example.com"]'
-```
-
-The backend rejects non-HTTPS origins when `APP_ENV=production`. The Docker Compose simulator below runs on HTTP localhost, so it intentionally defaults to `APP_ENV=development` while still using non-reloading production processes. Set `APP_ENV=production` only behind HTTPS with HTTPS origins.
-
-### Docker
-
-Docker files use the repository root as the build context so `.dockerignore` excludes local secrets, dependencies, build output, caches, and AppleDouble metadata. The backend image does not copy `.env` and starts Uvicorn without reload. The frontend image uses a Node build stage and serves `dist` with Nginx, including SPA route fallback.
-
-For a local production-process simulation, copy the examples and set only local placeholder-free values:
-
-```bash
-cp -n .env.example .env
-# In .env set a strong JWT_SECRET_KEY, a URL-safe POSTGRES_PASSWORD,
-# CORS_ORIGINS='["http://127.0.0.1:5173"]', APP_ENV=development,
-# and VITE_API_BASE_URL=http://127.0.0.1:8000.
+cp -n .env.example .env   # fill in JWT_SECRET_KEY and POSTGRES_PASSWORD
 docker compose up --build
 ```
-
-Compose starts `postgres`, runs the one-shot `migrate` job, then starts `backend` and `frontend`. Open `http://127.0.0.1:5173`; the frontend reaches the host-exposed backend at `http://127.0.0.1:8000`. Stop the simulator with `docker compose down`; add `-v` only when deliberately deleting its local database volume.
-
-### Local Production Simulation Without Docker
-
-With a migrated local PostgreSQL database, build the frontend with an explicit API URL and start both production processes without reload:
-
-```bash
-cd frontend
-VITE_API_BASE_URL=http://127.0.0.1:8000 npm run build
-npm run preview -- --host 127.0.0.1 --port 4173 --strictPort
-
-# Separate terminal
-cd backend
-APP_ENV=development CORS_ORIGINS='["http://127.0.0.1:4173"]' \
-  /path/to/venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-Verify `/health`, `/ready`, registration, login, trip creation, invitations, itinerary changes, expenses, balances, and settlement suggestions. Use the existing PostgreSQL verification scripts for disposable end-to-end test data.
-
-### Platform Configuration: Vercel + Render
-
-The frontend runs on Vercel with `frontend` as the Root Directory,
-Node `24.x`, `npm run build`, and `dist` as the Output Directory.
-`frontend/vercel.json` rewrites all paths to `index.html`, preserving direct
-React Router access to `/login`, `/register`, `/trips`, `/account`, and
-`/trips/:id`.
-
-The backend runs on a Render Python Web Service with `backend` as the
-Root Directory, build command `pip install -r requirements.txt`, start command
-`uvicorn app.main:app --host 0.0.0.0 --port $PORT`, and HTTP health check
-`/ready`. Use Render Postgres's internal connection URL when both services are
-in the same region. Standard provider `postgres://` and `postgresql://` URLs
-are normalized to the project's `postgresql+psycopg` driver at the config
-boundary; local development URLs continue to work unchanged.
-
-Render's Free Postgres tier is useful for a short-lived prototype, but it
-expires after 30 days and has no backups. A paid Render Postgres plan is the
-recommended persistent portfolio choice. Neon Postgres is a simple lower-cost
-prototype alternative after reviewing its current plan limits. See the
-[deployment checklist](docs/deployment-checklist.md) for the exact manual
-sequence, secret handling, migration procedure, CORS sequence, and smoke test.
-The complete Step 20A handoff, including the Render/Vercel fields and
-troubleshooting flow, is in the [production deployment runbook](docs/step20-production-deployment.md).
 
 ## Testing
 
 ```bash
-# frontend
-cd frontend
-npm test
-npm run lint
-npm run typecheck
-npm run build
-
-# backend
-cd ../backend
-python -m pytest -q
-RUN_POSTGRES_TESTS=1 python -m pytest -q
-
-# opt-in real PostgreSQL / FastAPI checks from repository root
-python frontend/scripts/verify_auth.py
-python frontend/scripts/verify_trips.py
-python frontend/scripts/verify_collaboration.py
-python frontend/scripts/verify_finance.py
+cd backend && python -m pytest -q                        # unit + contract + migration tests
+cd backend && RUN_POSTGRES_TESTS=1 python -m pytest -q   # plus PostgreSQL integration tests
+cd frontend && npm test && npm run lint && npm run typecheck && npm run build
 ```
 
-GitHub Actions runs the backend suite, including its PostgreSQL integration
-tests against a disposable PostgreSQL service, and runs the frontend tests,
-lint, typecheck, and production build. CI uses no production credentials.
+CI ([ci.yml](.github/workflows/ci.yml)) runs both suites on every push and pull request, with the backend tests against a disposable PostgreSQL 16 service. The scripts in `frontend/scripts/verify_*.py` exercise the real API end to end with disposable users.
 
-The verification scripts create random disposable users and clean them up. They require a migrated PostgreSQL database; they never substitute SQLite.
+## Engineering Notes
 
-## Known Limitations
+A few decisions worth knowing about:
 
-- No OAuth, refresh tokens, payments, maps, booking, chat, or live updates.
-- Logout clears the local token; server-side revocation is not implemented.
-- Backend authorization remains the source of truth; hidden browser controls are UX only.
+- **Why the server owns every number.** Floating-point money and client-side split logic are the classic source of "the balances don't add up". The backend stores `Decimal`, splits with a deterministic remainder (ascending user id), and returns strings; the UI only displays them.
+- **Why a trip-level row lock instead of optimistic versioning.** Groups are small and writes are rare, so serialising on the trip row is simpler to reason about than per-row version checks, and it makes the invariants (one split per member, contiguous day order) easy to prove in tests. The trade-off is documented in [known limitations](docs/known-limitations.md).
+- **Why the throttle lives in PostgreSQL.** Nominatim's usage policy is one request per second per application, not per process. A single `geocoder_throttle` row locked on each request enforces that across workers; an upstream 403/429 starts a shared cooldown.
+- **Why Leaflet is wrapped directly.** `react-leaflet` 5 is licensed under Hippocratic 2.1 (not OSI-approved), so the app wraps Leaflet (BSD-2-Clause) in a small `LeafletMap` component.
+- **Why straight-line distances.** The optimiser needs a metric that works without a routing provider. Great-circle distance is honest about being an approximation; the UI labels it "straight-line" everywhere.
 
-See [known limitations](docs/known-limitations.md) and the [Step 17 learning review](docs/step17-review.md).
+## Deployment
 
-## Frontend Experience
+The SPA is a static Vercel build, the API is a Render web service started with plain `uvicorn` (no reload), and the database is hosted PostgreSQL. Secrets live only in the platform's configuration store; `.env` is local-only.
 
-The React client now uses a consistent, light-blue travel workspace: a compact application shell, a preview-led landing page, focused authentication cards, responsive trip cards, and a tabbed Trip Detail workspace. The four detail tabs separate the overview, shared itinerary, expenses and balances, and members without changing routes or API calls.
+```text
+Browser → Vercel (static SPA) → Render (FastAPI) → Neon PostgreSQL
+```
 
-The design keeps the existing functional states visible: loading and error messages use semantic status roles, empty dashboards point users to the relevant next action, invitations retain server-authorized actions, and financial values are rendered directly from backend responses. Buttons, fields, cards, tabs, and member rows share the same spacing, borders, focus treatment, and mobile breakpoints.
+The step-by-step runbook, environment variable matrix, schema release procedure and smoke test are in [docs/production-deployment.md](docs/production-deployment.md) and the [deployment checklist](docs/deployment-checklist.md).
 
-## Screenshots
+## Known Limitations and Roadmap
 
-Real screenshots from the production application:
+This is a deliberately small, deployed MVP. The main gaps, all documented in [docs/known-limitations.md](docs/known-limitations.md):
 
-### Landing Page
+- No live push yet: other members' changes appear on reload or after the next write. Same-field writes are last-write-wins, with conflict detection on reorder and route apply.
+- Equal splits only, one currency per trip, no refresh tokens or password reset, unpaginated lists.
+- Public OSM tiles and Nominatim are for demos; real traffic needs a commercial or self-hosted provider.
 
-![TripTogether landing page](docs/screenshots/landing-page.png)
-
-### Trip Overview
-
-![TripTogether trip overview](docs/screenshots/trip-overview.png)
-
-### Trip Members
-
-![TripTogether trip members](docs/screenshots/trip-members.png)
-
-### Expenses & Balances
-
-![TripTogether expenses and balances](docs/screenshots/expenses-balances.png)
-
-## Future Improvements
-
-Future work may include rate limiting, token revocation, observability, real-browser accessibility testing, and CI. These are outside this hardening task.
+Planned next: real-time updates over WebSocket with version-based conflict handling, weighted splits with a minimum-transfer settlement, and Playwright end-to-end tests in CI.

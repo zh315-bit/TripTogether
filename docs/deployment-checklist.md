@@ -1,6 +1,6 @@
 # TripTogether Production Deployment Checklist
 
-This is a manual runbook for Step 19B. It intentionally contains no real URL,
+This is a manual runbook. It intentionally contains no real URL,
 credential, account, or deployment command that creates cloud resources.
 
 ## Configuration matrix
@@ -99,7 +99,7 @@ checks the server version and stops before running any DDL. Check it with
 
 Production uses **Neon** (project `triptogether`, `aws-us-east-2`, PostgreSQL
 18.6, database `triptogether`, role `triptogether_app`). It was migrated from
-Render PostgreSQL on 2026-10-18; see RECORD.md.
+Render PostgreSQL on 2026-10-18.
 
 Use Neon's **direct** connection string (host without `-pooler`) for the
 backend, for Alembic migrations and for `pg_dump`/`pg_restore`. The backend

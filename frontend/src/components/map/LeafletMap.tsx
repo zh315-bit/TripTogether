@@ -13,6 +13,8 @@ export type MapMarker = {
   color: string
   tooltip: string
   kind: 'place' | 'stop'
+  /** The pool place this marker stands for; clicking it selects that place. */
+  placeId?: number
 }
 
 export type MapLine = { id: string; positions: LatLng[]; color: string; dashed?: boolean }
@@ -23,6 +25,13 @@ type Props = {
   /** When set, a click on the map reports its coordinates instead of panning only. */
   onPick?: (position: LatLng) => void
   label: string
+  selectedPlaceId?: number | null
+  hoveredPlaceId?: number | null
+  /** A marker click selects its place; a click on empty map clears it (null). */
+  onSelectPlace?: (placeId: number | null) => void
+  onHoverPlace?: (placeId: number | null) => void
+  /** Positions to frame (e.g. the selected day's stops); empty or absent frames everything. */
+  fitTo?: LatLng[]
 }
 
 function textElement(tag: string, className: string, value: string): HTMLElement {
@@ -37,10 +46,18 @@ function textElement(tag: string, className: string, value: string): HTMLElement
  * Thin imperative bridge: React owns the props, Leaflet owns the map DOM.
  * The map is created once; marker and line layers are redrawn when props change.
  */
-export function LeafletMap({ markers, lines, onPick, label }: Props) {
+export function LeafletMap({
+  markers, lines, onPick, label, selectedPlaceId = null, hoveredPlaceId = null, onSelectPlace, onHoverPlace, fitTo,
+}: Props) {
   const container = useRef<HTMLDivElement>(null)
   const map = useRef<L.Map | null>(null)
   const layers = useRef<L.LayerGroup | null>(null)
+  const drawn = useRef<{ marker: L.Marker; placeId?: number }[]>([])
+  // Handlers are read through a ref so new callback identities do not redraw every marker.
+  const handlers = useRef({ onSelectPlace, onHoverPlace })
+  useEffect(() => {
+    handlers.current = { onSelectPlace, onHoverPlace }
+  }, [onSelectPlace, onHoverPlace])
 
   useEffect(() => {
     const element = container.current
@@ -67,6 +84,7 @@ export function LeafletMap({ markers, lines, onPick, label }: Props) {
     const group = layers.current
     if (!group) return
     group.clearLayers()
+    drawn.current = []
     for (const line of lines) {
       if (line.positions.length < 2) continue
       L.polyline(line.positions, {
@@ -81,17 +99,50 @@ export function LeafletMap({ markers, lines, onPick, label }: Props) {
         // Stop numbers sit up and to the right so they do not hide the place marker.
         iconAnchor: marker.kind === 'stop' ? [-4, 26] : [15, 15],
       })
-      L.marker(marker.position, { icon, title: marker.tooltip, alt: marker.tooltip, keyboard: true })
+      const instance = L.marker(marker.position, { icon, title: marker.tooltip, alt: marker.tooltip, keyboard: true })
         .bindTooltip(textElement('span', '', marker.tooltip))
         .addTo(group)
-        .getElement()?.style.setProperty('--marker-color', marker.color)
+      instance.getElement()?.style.setProperty('--marker-color', marker.color)
+      const { placeId } = marker
+      if (placeId !== undefined) {
+        // Leaflet also fires click for Enter on a focused marker, so this covers the keyboard.
+        instance.on('click', () => handlers.current.onSelectPlace?.(placeId))
+        instance.on('mouseover', () => handlers.current.onHoverPlace?.(placeId))
+        instance.on('mouseout', () => handlers.current.onHoverPlace?.(null))
+      }
+      drawn.current.push({ marker: instance, placeId })
     }
   }, [markers, lines])
 
-  // Refit only when the set of positions changes, so redraws keep the user's view.
-  const boundsKey = useMemo(() => JSON.stringify([
+  // Highlighting only toggles classes, so hovering a list row never rebuilds the layers.
+  useEffect(() => {
+    for (const { marker, placeId } of drawn.current) {
+      const selected = placeId !== undefined && placeId === selectedPlaceId
+      const element = marker.getElement()
+      element?.classList.toggle('is-selected', selected)
+      element?.classList.toggle('is-hovered', placeId !== undefined && placeId === hoveredPlaceId)
+      marker.setZIndexOffset(selected ? 1000 : 0)
+    }
+  }, [markers, lines, selectedPlaceId, hoveredPlaceId])
+
+  // Bring a newly selected place into view, clear of the detail card at the bottom.
+  useEffect(() => {
+    const instance = map.current
+    const target = drawn.current.find(({ placeId }) => placeId === selectedPlaceId)
+    if (!instance || !target) return
+    const position = target.marker.getLatLng()
+    if (instance.getZoom() < 12) instance.setView(position, 14, { animate: false })
+    // The card plus the phone's peeking sheet cover ~360px; keep the marker clear above them.
+    const bottom = Math.min(440, instance.getSize().y * 0.65)
+    instance.panInside(position, { paddingTopLeft: [48, 64], paddingBottomRight: [48, bottom] })
+    // Only on a new selection, not when markers redraw.
+  }, [selectedPlaceId])
+
+  // Refit only when the framed positions change, so redraws keep the user's view. While a
+  // focus is set, changes elsewhere (a new pool place) leave the view alone.
+  const boundsKey = useMemo(() => JSON.stringify(fitTo?.length ? fitTo : [
     ...markers.map((marker) => marker.position), ...lines.flatMap((line) => line.positions),
-  ]), [markers, lines])
+  ]), [markers, lines, fitTo])
   useEffect(() => {
     const instance = map.current
     if (!instance) return
@@ -104,7 +155,14 @@ export function LeafletMap({ markers, lines, onPick, label }: Props) {
   useEffect(() => {
     const instance = map.current
     const element = container.current
-    if (!instance || !element || !onPick) return
+    if (!instance || !element) return
+    if (!onPick) {
+      const clear = () => handlers.current.onSelectPlace?.(null)
+      instance.on('click', clear)
+      return () => {
+        instance.off('click', clear)
+      }
+    }
     const handler = (event: L.LeafletMouseEvent) => onPick([event.latlng.lat, event.latlng.wrap().lng])
     instance.on('click', handler)
     element.classList.add('map-picking')

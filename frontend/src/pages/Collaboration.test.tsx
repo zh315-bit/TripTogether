@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import App from '../App'
@@ -42,6 +42,7 @@ describe('collaboration and itinerary UI', () => {
       if (url.endsWith('/members')) return json([member])
       if (url.endsWith('/itinerary') && method === 'GET') return json([item])
       if (url.endsWith('/itinerary') && method === 'POST') return json(created, 201)
+      if (url.endsWith('/api/v1/trips')) return json([trip])
       if (url.endsWith('/trips/12')) return json(trip)
       return json([])
     })
@@ -62,18 +63,23 @@ describe('collaboration and itinerary UI', () => {
   it('reorders with the shown order and reloads after a conflict without retrying', async () => {
     const second = { ...item, id: 10, title: 'Dinner', position: 2 }
     const latest = [{ ...second, position: 1 }, { ...item, position: 2 }, { ...item, id: 11, title: 'Late', position: 3 }]
-    let listCalls = 0
+    let conflicted = false
+    let loadsAfterConflict = 0
     const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
       const method = init?.method ?? 'GET'
       if (url.endsWith('/health')) return json({ status: 'ok' })
       if (url.endsWith('/me')) return json(user)
-      if (url.endsWith('/itinerary/reorder')) return json({ error: {
-        code: 'ITINERARY_CONFLICT', message: 'The itinerary order changed; review it and retry', details: [],
-      } }, 409)
-      if (url.endsWith('/itinerary') && method === 'GET') {
-        listCalls += 1
-        return json(listCalls === 1 ? [item, second] : latest)
+      if (url.endsWith('/itinerary/reorder')) {
+        conflicted = true
+        return json({ error: {
+          code: 'ITINERARY_CONFLICT', message: 'The itinerary order changed; review it and retry', details: [],
+        } }, 409)
       }
+      if (url.endsWith('/itinerary') && method === 'GET') {
+        if (conflicted) loadsAfterConflict += 1
+        return json(conflicted ? latest : [item, second])
+      }
+      if (url.endsWith('/api/v1/trips')) return json([trip])
       if (url.endsWith('/trips/12')) return json(trip)
       return json([])
     })
@@ -87,7 +93,58 @@ describe('collaboration and itinerary UI', () => {
     expect(JSON.parse(String(reorders[0][1]?.body))).toEqual({
       date: '2027-06-10', item_ids: [10, 9], expected_item_ids: [9, 10],
     })
-    expect(listCalls).toBe(2)
+    // The panel reloads its list and tells the map to redraw; neither retries.
+    await waitFor(() => expect(loadsAfterConflict).toBe(2))
+  })
+
+  it('shows a moved row at once, keeps the server order, and puts it back if saving fails', async () => {
+    const second = { ...item, id: 10, title: 'Dinner', position: 2 }
+    let finish: (response: Response) => void = () => undefined
+    let fail = false
+    const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET'
+      if (url.endsWith('/health')) return json({ status: 'ok' })
+      if (url.endsWith('/me')) return json(user)
+      if (url.endsWith('/itinerary/reorder')) {
+        if (fail) return json({ error: { code: 'INTERNAL_ERROR', message: 'Could not save the order', details: [] } }, 500)
+        return new Promise<Response>((resolve) => { finish = resolve })
+      }
+      if (url.endsWith('/itinerary') && method === 'GET') return json([item, second])
+      if (url.endsWith('/api/v1/trips')) return json([trip])
+      if (url.endsWith('/trips/12')) return json(trip)
+      return json([])
+    })
+    const order = () => screen.getAllByRole('article').map((row) => row.querySelector('strong')?.textContent)
+    mount('/trips/12', fetcher)
+    await userEvent.click(await screen.findByRole('tab', { name: 'Itinerary' }))
+    expect(await screen.findByRole('button', { name: 'Drag Temple to reorder' })).toBeEnabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Move Temple down' }))
+    // Optimistic: the new order shows while the request is still open, and moves are locked.
+    expect(order()).toEqual(['Dinner', 'Temple'])
+    expect(screen.getByRole('button', { name: 'Drag Temple to reorder' })).toBeDisabled()
+    finish(json([{ ...second, position: 1 }, { ...item, position: 2 }]))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Drag Temple to reorder' })).toBeEnabled())
+    expect(order()).toEqual(['Dinner', 'Temple'])
+
+    fail = true
+    await userEvent.click(screen.getByRole('button', { name: 'Move Temple up' }))
+    expect(await screen.findByText('Could not save the order')).toBeInTheDocument()
+    expect(order()).toEqual(['Dinner', 'Temple'])
+  })
+
+  it('cannot drag the only item of a day', async () => {
+    const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET'
+      if (url.endsWith('/health')) return json({ status: 'ok' })
+      if (url.endsWith('/me')) return json(user)
+      if (url.endsWith('/itinerary') && method === 'GET') return json([item])
+      if (url.endsWith('/api/v1/trips')) return json([trip])
+      if (url.endsWith('/trips/12')) return json(trip)
+      return json([])
+    })
+    mount('/trips/12', fetcher)
+    await userEvent.click(await screen.findByRole('tab', { name: 'Itinerary' }))
+    expect(await screen.findByRole('button', { name: 'Drag Temple to reorder' })).toBeDisabled()
   })
 
   it('links an itinerary item to a pool place, following the place name for location', async () => {
@@ -108,6 +165,7 @@ describe('collaboration and itinerary UI', () => {
       if (url.endsWith('/itinerary') && method === 'POST') {
         return json({ ...item, id: 10, ...JSON.parse(String(init?.body)), position: 2 }, 201)
       }
+      if (url.endsWith('/api/v1/trips')) return json([trip])
       if (url.endsWith('/trips/12')) return json(trip)
       return json([])
     })

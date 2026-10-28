@@ -1,0 +1,93 @@
+/* Map-first workspace: sidebar of tools beside a full-height map; a bottom sheet on phones. */
+.trip-workspace { display: grid; flex: 1; min-height: 0; grid-template-columns: minmax(340px, 410px) minmax(0, 1fr); }
+.workspace-sidebar { z-index: 1100; display: flex; min-height: 0; flex-direction: column; border-right: 1px solid var(--border); background: var(--surface); }
+.sheet-handle { display: none; }
+.panel-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 12px; border-bottom: 1px solid var(--border); }
+.panel-tabs button { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 6px; padding: 6px 8px; border: 1px solid transparent; border-radius: 12px; background: transparent; color: var(--ink-muted); font: inherit; font-size: 13px; font-weight: 750; white-space: nowrap; }
+.panel-tabs button:hover { background: var(--surface-secondary); color: var(--ink); }
+.panel-tabs button.active { border-color: #c9e4fa; background: var(--primary-light); color: var(--primary-strong); }
+.panel-body { display: grid; flex: 1; min-height: 0; align-content: start; gap: 16px; overflow-y: auto; padding: 16px; overscroll-behavior: contain; }
+
+/* Existing panels were page-width; tighten them for the sidebar. */
+.panel-body .collab-section { margin: 0; padding: 0; border: 0; }
+.panel-body h2 { font-size: 21px; }
+.panel-body .eyebrow { margin-bottom: 6px; }
+.panel-body .trip-editor { max-width: none; margin: 8px 0 0; padding: 16px; }
+.panel-body .itinerary-form-grid, .panel-body .expense-form-grid, .panel-body .trip-date-grid { grid-template-columns: 1fr; }
+.panel-body .itinerary-day { padding-left: 22px; }
+.panel-body .itinerary-row, .panel-body .expense-row, .panel-body .member-row, .panel-body .balance-row, .panel-body .settlement-row { flex-wrap: wrap; }
+.panel-body .map-card { padding: 16px; }
+/* Row actions: compact so names keep the width in a ~400px sidebar. */
+.panel-body :is(.place-row, .itinerary-row, .expense-row, .member-row, .map-result-list li) .actions { flex-wrap: nowrap; gap: 6px; }
+.panel-body :is(.place-row, .itinerary-row, .expense-row, .member-row, .map-result-list li) :is(.retry-button, .danger-button, .primary-button) { min-height: 32px; padding: 4px 10px; border-radius: 8px; font-size: 13px; }
+.panel-body .icon-button { width: 30px; height: 30px; }
+.panel-body .itinerary-row { flex-wrap: nowrap; }
+.panel-body .itinerary-row > div:first-child { flex: 1; }
+.panel-section { display: grid; gap: 14px; }
+.panel-section h3 { margin: 0; }
+.trip-facts { display: grid; gap: 10px; margin: 0; }
+.trip-facts > div { padding: 12px 14px; border-radius: 12px; background: var(--surface-secondary); }
+.trip-facts dt { margin-bottom: 4px; color: var(--ink-muted); font-size: 12px; font-weight: 700; }
+.trip-facts dd { margin: 0; color: var(--ink); font-weight: 750; }
+
+.workspace-map { position: relative; min-width: 0; min-height: 0; }
+.workspace-map .leaflet-host { height: 100%; border: 0; border-radius: 0; }
+.map-overlay { position: absolute; z-index: 900; margin: 0; }
+.map-overlay-top { top: 12px; right: 12px; display: grid; justify-items: end; gap: 8px; pointer-events: none; }
+.map-overlay-bottom { bottom: 26px; left: 12px; max-width: calc(100% - 24px); padding: 8px 12px; border-radius: 14px; background: rgba(255, 255, 255, .92); box-shadow: 0 6px 18px rgba(23, 35, 58, .14); }
+.map-chip { margin: 0; padding: 7px 14px; border: 1px solid rgba(255, 255, 255, .8); border-radius: 999px; background: rgba(255, 255, 255, .94); box-shadow: 0 6px 18px rgba(23, 35, 58, .14); color: var(--ink); font-size: 13px; font-weight: 700; pointer-events: auto; }
+.map-chip-accent { background: var(--primary); color: #fff; }
+
+@media (max-width: 768px) {
+  .trip-workspace { position: relative; display: block; }
+  .workspace-map { position: absolute; inset: 0; }
+  .workspace-sidebar { position: absolute; right: 0; bottom: 0; left: 0; border: 0; border-radius: 20px 20px 0 0; box-shadow: 0 -12px 32px rgba(23, 35, 58, .2); transition: height .28s ease; }
+  .sheet-peek { height: 118px; }
+  .sheet-half { height: 56%; }
+  .sheet-full { height: calc(100% - 8px); }
+  .sheet-peek .panel-body { display: none; }
+  .sheet-handle { display: grid; width: 100%; height: 22px; flex: 0 0 auto; place-items: center; border: 0; background: transparent; }
+  .sheet-handle span { width: 44px; height: 5px; border-radius: 999px; background: var(--border-strong); }
+  .panel-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 4px 12px 12px; scrollbar-width: none; }
+  .panel-tabs button { flex: 0 0 auto; }
+  .map-overlay-bottom { bottom: 130px; }
+  .workspace-sidebar.sheet-half ~ .workspace-map .map-overlay-bottom, .workspace-sidebar.sheet-full ~ .workspace-map .map-overlay-bottom { display: none; }
+}
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  .workspace-sidebar { transition: none; }
+}
+
+/* Straight-line hops between the route day's rows. */
+.itinerary-day-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.itinerary-day-heading h3 { margin: 0; }
+.itinerary-leg { margin: 0; padding: 2px 0 2px 16px; border-top: 1px solid var(--border); color: var(--ink-muted); font-size: 12px; font-weight: 700; }
+.itinerary-leg + .itinerary-row { padding-top: 6px; }
+.itinerary-leg + .itinerary-row::before { top: 17px; }
+.map-chip-row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.map-chip-button { border-color: var(--border); font: inherit; font-size: 13px; font-weight: 750; cursor: pointer; }
+.map-chip-button:hover { color: var(--primary-strong); border-color: var(--primary); }
+
+/* Expense summary: the signed-in member's position above the expense list. */
+.finance-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.summary-card { display: grid; gap: 4px; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.summary-card p { margin: 0; }
+.summary-headline { grid-column: 1 / -1; padding: 18px; }
+.summary-label { color: var(--ink-muted); font-size: 12px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.summary-amount { color: var(--ink); font-size: 30px; font-weight: 850; line-height: 1.1; overflow-wrap: anywhere; }
+.summary-amount-small { font-size: 18px; }
+.summary-headline.is-owing { border-color: var(--danger-line); background: var(--danger-soft); }
+.summary-headline.is-owing .summary-amount { color: var(--danger); }
+.summary-headline.is-owed { border-color: var(--sea-light); background: var(--sea-light); }
+.summary-headline.is-owed .summary-amount { color: var(--success); }
+.summary-headline.is-square .summary-amount { color: var(--success); }
+.summary-transfers { display: grid; grid-column: 1 / -1; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.summary-transfers li { display: flex; justify-content: space-between; gap: 10px; padding: 10px 14px; border-radius: 12px; background: var(--surface-secondary); font-weight: 700; }
+.summary-link { grid-column: 1 / -1; justify-self: start; }
+.finance-summary-empty { margin: 0; padding: 14px; border: 1px dashed var(--border-strong); border-radius: 14px; }
+
+/* Drag to reorder: a grip on the left of each row; the arrows stay for keyboards. */
+.panel-body .itinerary-row { gap: 8px; }
+.drag-handle { display: grid; width: 22px; min-height: 32px; flex: 0 0 auto; place-items: center; margin-left: -6px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--ink-muted); font-size: 16px; cursor: grab; touch-action: none; }
+.drag-handle:hover:not(:disabled) { background: var(--surface-secondary); color: var(--ink); }
+.drag-handle:disabled { cursor: default; opacity: .35; }
+.itinerary-row.is-dragging { z-index: 2; border-radius: 12px; background: var(--surface); box-shadow: 0 10px 24px rgba(23, 35, 58, .18); cursor: grabbing; }

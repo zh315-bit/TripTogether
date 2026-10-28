@@ -1,17 +1,21 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import App from '../../App'
-import { TOKEN_KEY } from '../../auth/tokenStorage'
-import type { LatLng, MapLine, MapMarker } from './LeafletMap'
+import App from '../App'
+import { TOKEN_KEY } from '../auth/tokenStorage'
+import type { LatLng, MapLine, MapMarker } from '../components/map/LeafletMap'
 
 // jsdom cannot lay out a real Leaflet map; this stand-in exposes what would be drawn.
-vi.mock('./LeafletMap', () => ({
-  LeafletMap: ({ markers, lines, onPick }: {
+vi.mock('../components/map/LeafletMap', () => ({
+  LeafletMap: ({ markers, lines, onPick, selectedPlaceId, onSelectPlace, fitTo }: {
     markers: MapMarker[]; lines: MapLine[]; onPick?: (position: LatLng) => void
-  }) => <div data-testid="map">
+    selectedPlaceId?: number | null; onSelectPlace?: (placeId: number | null) => void; fitTo?: LatLng[]
+  }) => <div data-testid="map" data-fit={fitTo ? fitTo.length : 'all'}>
     <ul aria-label="Map markers">{markers.map((marker) => <li key={marker.id} data-kind={marker.kind}
-      data-color={marker.color}>{marker.label}|{marker.tooltip}</li>)}</ul>
+      data-color={marker.color} data-selected={String(marker.placeId !== undefined && marker.placeId === selectedPlaceId)}
+    >{marker.label}|{marker.tooltip}</li>)}</ul>
+    {onSelectPlace && markers.filter((marker) => marker.kind === 'place').map((marker) => <button key={marker.id}
+      type="button" onClick={() => onSelectPlace(marker.placeId ?? null)}>Click marker {marker.tooltip}</button>)}
     {lines.map((line) => <span key={line.id} data-testid={`line-${line.id}`}
       data-dashed={String(Boolean(line.dashed))}>{line.positions.length}</span>)}
     {onPick && <button type="button" onClick={() => onPick([35.123456, 139.654321])}>Simulate map click</button>}
@@ -73,6 +77,7 @@ function server(handler: Handler = () => undefined) {
     if (custom) return custom
     if (url.pathname === '/health') return json({ status: 'ok' })
     if (url.pathname.endsWith('/me')) return json(user)
+    if (url.pathname === '/api/v1/trips' && method === 'GET') return json([trip])
     if (url.pathname === '/api/v1/trips/12') return json(trip)
     if (url.pathname.endsWith('/members')) return json(members)
     if (url.pathname.endsWith('/places') && method === 'GET') return json(state.places)
@@ -97,30 +102,43 @@ function body(call: unknown[]) {
   return JSON.parse(String((call[1] as RequestInit).body))
 }
 
-async function openMap(fetcher: ReturnType<typeof vi.fn>) {
+/** Opening a trip *is* the map; sidebar panels are tabs beside it. */
+async function openMap(fetcher: ReturnType<typeof vi.fn>, panel = 'Places') {
   sessionStorage.setItem(TOKEN_KEY, 'opaque-test-token')
   window.history.replaceState(null, '', '/trips/12')
   vi.stubGlobal('fetch', fetcher)
   render(<App />)
-  await userEvent.click(await screen.findByRole('tab', { name: 'Map' }))
-  await screen.findByRole('heading', { name: 'Map' })
+  await screen.findByTestId('map')
+  if (panel !== 'Places') await userEvent.click(screen.getByRole('tab', { name: panel }))
+  await waitFor(() => expect(screen.queryByText('Loading trip data...')).not.toBeInTheDocument())
 }
 
-describe('map tab', () => {
-  it('is a keyboard-reachable tab that lazy-loads behind a Suspense fallback', async () => {
+describe('map workspace', () => {
+  it('opens on the map with keyboard-navigable sidebar tabs kept in the URL', async () => {
+    const { fetcher } = server()
+    await openMap(fetcher)
+    const places = screen.getByRole('tab', { name: 'Places' })
+    expect(places).toHaveAttribute('aria-selected', 'true')
+    places.focus()
+    await userEvent.keyboard('{ArrowDown}')
+    const itinerary = screen.getByRole('tab', { name: 'Itinerary' })
+    expect(itinerary).toHaveAttribute('aria-selected', 'true')
+    expect(itinerary).toHaveFocus()
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'panel-tab-itinerary')
+    expect(window.location.search).toBe('?panel=itinerary')
+    await userEvent.keyboard('{End}')
+    expect(screen.getByRole('tab', { name: 'Trip details' })).toHaveAttribute('aria-selected', 'true')
+    await userEvent.keyboard('{Home}')
+    expect(screen.getByRole('tab', { name: 'Places' })).toHaveFocus()
+  })
+
+  it('reopens the panel named in the URL', async () => {
     const { fetcher } = server()
     sessionStorage.setItem(TOKEN_KEY, 'opaque-test-token')
-    window.history.replaceState(null, '', '/trips/12')
+    window.history.replaceState(null, '', '/trips/12?panel=members')
     vi.stubGlobal('fetch', fetcher)
     render(<App />)
-    const itinerary = await screen.findByRole('tab', { name: 'Itinerary' })
-    await userEvent.click(itinerary)
-    await userEvent.keyboard('{ArrowRight}')
-    const map = screen.getByRole('tab', { name: 'Map' })
-    expect(map).toHaveAttribute('aria-selected', 'true')
-    expect(map).toHaveAttribute('aria-controls', 'trip-panel-map')
-    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'trip-tab-map')
-    expect(await screen.findByRole('heading', { name: 'Map' })).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: 'Members' })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('shows the place pool with member colours, names and markers', async () => {
@@ -272,7 +290,7 @@ describe('map tab', () => {
 
   it('shows the day route as straight-line legs with unlocated items', async () => {
     const { fetcher } = server()
-    await openMap(fetcher)
+    await openMap(fetcher, 'Itinerary')
     expect(screen.getByText('Straight-line distance, not actual travel distance or time.')).toBeInTheDocument()
     const stops = within(await screen.findByRole('list', { name: 'Route stops' })).getAllByRole('listitem')
     expect(stops.map((stop) => stop.textContent)).toEqual([
@@ -288,12 +306,67 @@ describe('map tab', () => {
       ([url]) => new URL(String(url)).searchParams.get('date'))).toContain('2027-06-11'))
   })
 
+  it('shows each hop between the route day\'s itinerary rows and switches days from the list', async () => {
+    const { fetcher, state } = server()
+    state.items.push({ ...item(20, 'Museum', 1, 2), date: '2027-06-11' })
+    await openMap(fetcher, 'Itinerary')
+    const itinerary = screen.getByRole('region', { name: 'Itinerary' })
+    await within(itinerary).findByText('14.3 km straight-line')
+    // Lunch has no place, so the first hop into Tower visit names where it starts.
+    expect([...itinerary.querySelectorAll('.itinerary-leg')].map((leg) => leg.textContent)).toEqual([
+      '↓ 1.82 km from Temple', '↓ 12.5 km',
+    ])
+    await userEvent.click(within(itinerary).getByRole('button', { name: 'Show the route and distances for 2027-06-11' }))
+    expect(screen.getByLabelText('Day')).toHaveValue('2027-06-11')
+    await waitFor(() => expect(calls(fetcher, '/api/v1/trips/12/itinerary/route').map(
+      ([url]) => new URL(String(url)).searchParams.get('date'))).toContain('2027-06-11'))
+  })
+
+  it('frames the route day on the map until asked to show every place', async () => {
+    const { fetcher } = server()
+    await openMap(fetcher)
+    expect(await screen.findByText(/2027-06-10 · 3 stops · 14\.3 km straight-line/)).toBeInTheDocument()
+    const map = screen.getByTestId('map')
+    expect(map).toHaveAttribute('data-fit', '3')
+    await userEvent.click(screen.getByRole('button', { name: 'Show all places' }))
+    expect(map).toHaveAttribute('data-fit', 'all')
+    await userEvent.click(screen.getByRole('button', { name: 'Focus on this day' }))
+    expect(map).toHaveAttribute('data-fit', '3')
+  })
+
+  it('adds a pool place to the chosen day and marks it as scheduled', async () => {
+    const { fetcher } = server((url, init) => {
+      if (url.pathname.endsWith('/itinerary') && init.method === 'POST') {
+        const body = JSON.parse(String(init.body))
+        return json({ ...item(30, body.title, 1, body.place_id), date: body.date, location: 'Senso-ji' }, 201)
+      }
+      return undefined
+    })
+    await openMap(fetcher)
+    const pool = screen.getByRole('region', { name: /Place pool/ })
+    // Both places already have an item on the first day.
+    expect(within(pool).getAllByText('On 06-10')).toHaveLength(2)
+    await userEvent.selectOptions(within(pool).getByLabelText('Add places to'), '2027-06-11')
+    expect(within(pool).queryByText(/^On /)).not.toBeInTheDocument()
+    await userEvent.click(within(pool).getByRole('button', { name: 'Add Senso-ji to the itinerary on 2027-06-11' }))
+    expect(await screen.findByText('Senso-ji added to 2027-06-11.')).toBeInTheDocument()
+    expect(within(pool).getAllByText('On 06-11')).toHaveLength(1)
+    const [post] = calls(fetcher, '/api/v1/trips/12/itinerary', 'POST')
+    expect(body(post)).toEqual({
+      title: 'Senso-ji', date: '2027-06-11', location: null, start_time: null, end_time: null, notes: null, place_id: 1,
+    })
+    // The map's day follows the picker, and the route reloads after adding.
+    expect(calls(fetcher, '/api/v1/trips/12/itinerary/route').map(
+      ([url]) => new URL(String(url)).searchParams.get('date')).filter((date) => date === '2027-06-11').length)
+      .toBeGreaterThanOrEqual(2)
+  })
+
   it('previews a suggested order and applies it with the expected order', async () => {
     const { fetcher } = server((url) => {
       if (url.pathname.endsWith('/optimize')) return json(plan)
       if (url.pathname.endsWith('/reorder')) return json([])
     })
-    await openMap(fetcher)
+    await openMap(fetcher, 'Itinerary')
     await userEvent.click(screen.getByRole('button', { name: 'Suggest shorter order' }))
     const preview = await screen.findByRole('region', { name: 'Suggested order preview' })
     expect(body(calls(fetcher, '/api/v1/trips/12/itinerary/optimize', 'POST')[0])).toEqual({
@@ -310,13 +383,14 @@ describe('map tab', () => {
     expect(body(calls(fetcher, '/api/v1/trips/12/itinerary/reorder', 'PATCH')[0])).toEqual({
       date: '2027-06-10', item_ids: [9, 10, 13, 11], expected_item_ids: [9, 10, 11, 13],
     })
-    expect(calls(fetcher, '/api/v1/trips/12/itinerary').length).toBe(itineraryLoads + 1)
+    // One reload for the map's titles, one for the itinerary list beneath it.
+    expect(calls(fetcher, '/api/v1/trips/12/itinerary').length).toBe(itineraryLoads + 2)
     expect(screen.queryByTestId('line-suggested')).not.toBeInTheDocument()
   })
 
   it('cancel discards the preview without writing', async () => {
     const { fetcher } = server((url) => url.pathname.endsWith('/optimize') ? json(plan) : undefined)
-    await openMap(fetcher)
+    await openMap(fetcher, 'Itinerary')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Keep the first item as the start' }))
     await userEvent.click(screen.getByRole('button', { name: 'Suggest shorter order' }))
     expect(body(calls(fetcher, '/api/v1/trips/12/itinerary/optimize', 'POST')[0]).keep_first).toBe(false)
@@ -328,7 +402,7 @@ describe('map tab', () => {
   it('says when the current order is already short', async () => {
     const { fetcher } = server((url) => url.pathname.endsWith('/optimize')
       ? json({ ...plan, changed: false, proposed_item_ids: plan.original_item_ids, proposed_route: route }) : undefined)
-    await openMap(fetcher)
+    await openMap(fetcher, 'Itinerary')
     await userEvent.click(screen.getByRole('button', { name: 'Suggest shorter order' }))
     expect(await screen.findByText('The current order is already a short route (straight-line).')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Apply suggested order' })).not.toBeInTheDocument()
@@ -341,7 +415,7 @@ describe('map tab', () => {
         return error('ITINERARY_CONFLICT', 'The itinerary order changed; review it and retry', 409)
       }
     })
-    await openMap(fetcher)
+    await openMap(fetcher, 'Itinerary')
     await userEvent.click(screen.getByRole('button', { name: 'Suggest shorter order' }))
     const routeLoads = calls(fetcher, '/api/v1/trips/12/itinerary/route').length
     await userEvent.click(await screen.findByRole('button', { name: 'Apply suggested order' }))
@@ -356,15 +430,53 @@ describe('map tab', () => {
       'Request validation failed', 422, [{
         loc: ['body'], msg: 'Route optimization supports at most 50 items per day', type: 'value_error',
       }]) : undefined)
-    await openMap(fetcher)
+    await openMap(fetcher, 'Itinerary')
     await userEvent.click(screen.getByRole('button', { name: 'Suggest shorter order' }))
     expect(await screen.findByText('Route optimization supports at most 50 items per day')).toBeInTheDocument()
+  })
+
+  it('syncs a place picked in the list with the map and opens its detail card', async () => {
+    const { fetcher } = server()
+    await openMap(fetcher)
+    await userEvent.click(screen.getByRole('button', { name: 'Show Senso-ji on the map' }))
+    const card = screen.getByRole('region', { name: 'Senso-ji' })
+    expect(within(card).getByText('Proposed by friend')).toBeInTheDocument()
+    expect(within(card).getByText('Temple')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show Senso-ji on the map' })).toHaveAttribute('aria-pressed', 'true')
+    // The pool marker and the day-route stop for the same place both highlight.
+    const selected = within(screen.getByRole('list', { name: 'Map markers' })).getAllByRole('listitem')
+      .filter((li) => li.dataset.selected === 'true')
+    expect(selected.map((li) => li.dataset.kind)).toEqual(['place', 'stop'])
+    expect(screen.queryByRole('list', { name: 'Member colours' })).not.toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('region', { name: 'Senso-ji' })).not.toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'Member colours' })).toBeInTheDocument()
+  })
+
+  it('opens the card from a map marker and jumps back to the place list', async () => {
+    const { fetcher } = server()
+    await openMap(fetcher, 'Itinerary')
+    await userEvent.click(screen.getByRole('button', { name: /^Click marker Tower/ }))
+    const card = screen.getByRole('region', { name: 'Tower' })
+    expect(within(card).getByText('Tower visit')).toBeInTheDocument()
+    await userEvent.click(within(card).getByRole('button', { name: 'Show in place list' }))
+    expect(screen.getByRole('tab', { name: 'Places' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('button', { name: 'Show Tower on the map' })).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(within(card).getByRole('button', { name: 'Close place details' }))
+    expect(screen.queryByRole('region', { name: 'Tower' })).not.toBeInTheDocument()
+  })
+
+  it('selects a linked place from an itinerary row', async () => {
+    const { fetcher } = server()
+    await openMap(fetcher, 'Itinerary')
+    await userEvent.click(await screen.findByRole('button', { name: 'Show Tower on the map' }))
+    expect(screen.getByRole('region', { name: 'Tower' })).toBeInTheDocument()
   })
 })
 
 describe('day route panel anchors', () => {
   it('labels why each anchored item stays in place', async () => {
-    const { DayRoutePanel } = await import('./DayRoutePanel')
+    const { DayRoutePanel } = await import('../components/map/DayRoutePanel')
     const items = new Map([
       [9, item(9, 'Hotel', 1, 1)], [10, item(10, 'Dinner booking', 2, 2, '19:00:00')], [11, item(11, 'Rest', 3, null)],
     ])

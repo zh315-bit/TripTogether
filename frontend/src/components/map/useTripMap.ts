@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError } from '../../api/client'
-import { listItinerary, listMembers, reorderItinerary } from '../../api/collaboration'
+import { createItineraryItem, listItinerary, listMembers, reorderItinerary } from '../../api/collaboration'
 import {
   createPlace, deletePlace, getDayRoute, listPlaces, optimizeDay, updatePlace,
 } from '../../api/places'
@@ -9,26 +9,22 @@ import type { ItineraryItem, TripMember } from '../../types/collaboration'
 import type { DayRoute, GeocodeResult, OptimizePlan, PlaceInput, PlaceUpdate, TripPlace } from '../../types/places'
 import type { Trip } from '../../types/trip'
 import { memberStyle, memberStyles } from '../../utils/memberColors'
-import { DayRoutePanel } from './DayRoutePanel'
-import { tripDays } from './days'
 import { errorCode, errorText } from './errorText'
-import { LeafletMap } from './LeafletMap'
 import type { LatLng, MapLine, MapMarker } from './LeafletMap'
-import { PlacePool } from './PlacePool'
-import { PlaceSearch } from './PlaceSearch'
-import './MapPanel.css'
 
 const ROUTE_COLOR = '#17233a'
 const SUGGESTED_COLOR = '#c2410c'
 const CONFLICT_MESSAGE =
   'This day was changed by another member. The latest itinerary has been loaded; suggest again for a fresh order.'
 
+export type RoutePending = 'route' | 'suggest' | 'apply' | null
+
 /**
- * Data flow: places, members and itinerary are loaded once; the selected day's
- * route is loaded per day. Optimization returns a plan that is only previewed
- * until the user applies it through the guarded reorder endpoint.
+ * One trip's map state, shared by the sidebar panels and the map canvas.
+ * Places, members and itinerary load once; the selected day's route loads per
+ * day. An optimize plan is only a preview until applied through guarded reorder.
  */
-export default function MapPanel({ trip }: { trip: Trip }) {
+export function useTripMap(trip: Trip) {
   const { request } = useAuth()
   const tripId = String(trip.id)
   const [members, setMembers] = useState<TripMember[]>([])
@@ -43,8 +39,13 @@ export default function MapPanel({ trip }: { trip: Trip }) {
   const [route, setRoute] = useState<DayRoute | null>(null)
   const [plan, setPlan] = useState<OptimizePlan | null>(null)
   const [keepFirst, setKeepFirst] = useState(true)
-  const [pending, setPending] = useState<'route' | 'suggest' | 'apply' | null>(null)
+  const [pending, setPending] = useState<RoutePending>(null)
   const [routeMessage, setRouteMessage] = useState('')
+  // Bumped when the map changes the itinerary itself (apply), so list views reload.
+  const [itineraryVersion, setItineraryVersion] = useState(0)
+  // Shared by the map and the lists: a place picked in one is highlighted in the other.
+  const [selectedPlaceId, setSelectedPlaceId] = useState<number | null>(null)
+  const [hoveredPlaceId, setHoveredPlaceId] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     setStatus('loading')
@@ -91,12 +92,14 @@ export default function MapPanel({ trip }: { trip: Trip }) {
     ...places.map((place) => {
       const style = memberStyle(styles, place.proposed_by_user_id)
       return {
-        id: `place-${place.id}`, position: [place.latitude, place.longitude] as LatLng, kind: 'place' as const,
+        id: `place-${place.id}`, placeId: place.id, position: [place.latitude, place.longitude] as LatLng,
+        kind: 'place' as const,
         label: style.initial, color: style.color, tooltip: `${place.name} — proposed by ${style.name}`,
       }
     }),
     ...(route?.stops ?? []).map((stop, index) => ({
-      id: `stop-${stop.item_id}`, position: [stop.latitude, stop.longitude] as LatLng, kind: 'stop' as const,
+      id: `stop-${stop.item_id}`, placeId: stop.place_id, position: [stop.latitude, stop.longitude] as LatLng,
+      kind: 'stop' as const,
       label: String(index + 1), color: ROUTE_COLOR,
       tooltip: `${index + 1}. ${itemsById.get(stop.item_id)?.title ?? stop.name} (${stop.name})`,
     })),
@@ -114,10 +117,22 @@ export default function MapPanel({ trip }: { trip: Trip }) {
     return result
   }, [route, plan])
 
+  // A deleted place simply stops matching, so the detail card closes on its own.
+  const selectedPlace = useMemo(
+    () => places.find((place) => place.id === selectedPlaceId) ?? null, [places, selectedPlaceId])
+  const selectedItems = useMemo(
+    () => selectedPlace ? items.filter((item) => item.place_id === selectedPlace.id) : [], [items, selectedPlace])
+
   const pick = useCallback((position: LatLng) => {
     setPicked(position)
     setPicking(false)
   }, [])
+
+  /** Called when the itinerary changed elsewhere (sidebar edits): titles and route. */
+  const refreshItinerary = useCallback(async () => {
+    setItems(await listItinerary(request, tripId).catch(() => items))
+    await loadRoute()
+  }, [request, tripId, items, loadRoute])
 
   async function addResult(result: GeocodeResult): Promise<string> {
     try {
@@ -158,6 +173,19 @@ export default function MapPanel({ trip }: { trip: Trip }) {
     await loadRoute()
   }
 
+  /** Appends the place to the route day's itinerary; the server fills location from its name. */
+  async function addToDay(place: TripPlace) {
+    // Titles are capped at 160 characters, place names at 200.
+    const created = await createItineraryItem(request, tripId, {
+      title: place.name.slice(0, 160).trim(), date: day, location: null, start_time: null, end_time: null,
+      notes: null, place_id: place.id,
+    })
+    setItems((current) => [...current, created])
+    setItineraryVersion((version) => version + 1)
+    setNotice(`${place.name} added to ${day}.`)
+    await loadRoute()
+  }
+
   async function suggest() {
     setPending('suggest')
     setRouteMessage('')
@@ -190,41 +218,22 @@ export default function MapPanel({ trip }: { trip: Trip }) {
       setPending(null)
     }
     setItems(await listItinerary(request, tripId).catch(() => items))
+    setItineraryVersion((version) => version + 1)
     await loadRoute()
   }
 
-  if (status === 'loading') return <p role="status">Loading map data...</p>
-  if (status === 'error') return <div className="inline-error" role="alert"><p>{loadMessage}</p>
-    <button className="retry-button" type="button" onClick={() => void load()}>Try again</button></div>
+  function cancelPlan() {
+    setPlan(null)
+    setRouteMessage('')
+  }
 
-  return <section className="collab-section map-section" aria-labelledby="map-section-title">
-    <div className="section-heading">
-      <div><p className="eyebrow">Plan together</p><h2 id="map-section-title">Map</h2></div>
-    </div>
-    <div className="map-layout">
-      <div className="map-stage">
-        <LeafletMap markers={markers} lines={lines} onPick={picking ? pick : undefined}
-          label="Trip map with proposed places and the selected day's route" />
-        {picking && <p className="map-status" role="status">Click the map to set the new place's coordinates.</p>}
-        <ul className="member-legend" aria-label="Member colours">
-          {members.map((member) => {
-            const style = memberStyle(styles, member.user_id)
-            return <li key={member.user_id}><span className="member-swatch" style={{ background: style.color }}
-              aria-hidden="true">{style.initial}</span>{member.username}</li>
-          })}
-        </ul>
-      </div>
-      <div className="map-sidebar">
-        {notice && <p className="success-message" role="status">{notice}</p>}
-        <PlaceSearch onAdd={addResult} />
-        <PlacePool places={places} styles={styles} picking={picking} picked={picked}
-          onTogglePicking={() => setPicking((value) => !value)}
-          onCreate={createManual} onUpdate={update} onDelete={remove} />
-        <DayRoutePanel days={tripDays(trip.start_date, trip.end_date)} day={day} onDay={setDay}
-          route={route} plan={plan} itemsById={itemsById} keepFirst={keepFirst} onKeepFirst={setKeepFirst}
-          pending={pending} message={routeMessage} onSuggest={() => void suggest()}
-          onApply={() => void apply()} onCancel={() => { setPlan(null); setRouteMessage('') }} />
-      </div>
-    </div>
-  </section>
+  return {
+    status, loadMessage, load, notice, members, places, items, itemsById, styles,
+    markers, lines, picking, picked, pick, togglePicking: () => setPicking((value) => !value),
+    selectedPlace, selectedItems, selectPlace: setSelectedPlaceId, hoveredPlaceId, hoverPlace: setHoveredPlaceId,
+    day, setDay, route, plan, keepFirst, setKeepFirst, pending, routeMessage,
+    addResult, createManual, update, remove, addToDay, suggest, apply, cancelPlan, refreshItinerary, itineraryVersion,
+  }
 }
+
+export type TripMapState = ReturnType<typeof useTripMap>

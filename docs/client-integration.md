@@ -1,10 +1,9 @@
 # Client Integration Guide
 
-Current client: React + TypeScript + Vite foundation, authentication, Trip
-management, collaboration/itinerary and Step16 expense/balance UI.
-Steps17-20 are not started.
-The web-first roadmap supersedes the earlier HarmonyOS plan without
-changing the Step11 API contract or backend behavior.
+Current client: React + TypeScript + Vite single-page app covering
+authentication, trip management, collaboration/itinerary, the collaborative
+map, and expense/balance UI. The web client consumes the `/api/v1` contract
+without changing backend behavior.
 
 ## Base URL
 
@@ -14,7 +13,7 @@ Use relative paths such as `/auth/login` and `/trips` against that base.
 System probes and documentation are outside it:
 `http://127.0.0.1:8000/health`, `/ready`, `/docs`, `/openapi.json`.
 
-Step12 configures `VITE_API_BASE_URL` as the backend origin (without `/api/v1`).
+The client configures `VITE_API_BASE_URL` as the backend origin (without `/api/v1`).
 Its health adapter uses `/health`; future business adapters pass `/api/v1/...`.
 The relative business paths below describe the API contract, not direct arguments
 to the current origin-based `apiFetch`. Do not hardcode addresses in
@@ -26,7 +25,7 @@ credentials or JWT signing secrets. Use HTTPS for deployed credentials.
 For cross-origin browser development, set backend CORS_ORIGINS to the actual
 frontend origin, including scheme and port; localhost and127.0.0.1 differ.
 The examples below use localhost:3000 only as an example, not a configured Vite
-server. Step12 uses `http://127.0.0.1:5173`; configure that exact origin
+server. Local development uses `http://127.0.0.1:5173`; configure that exact origin
 as shown in README. No proxy bypasses browser CORS.
 If testing a mobile-width browser on another device later, its loopback is not
 the Mac: use a reachable LAN host on a trusted network and configure CORS for
@@ -34,9 +33,8 @@ that browser's actual origin. Native clients are deferred future work.
 
 ## Web Client Responsibilities
 
-Step12 establishes the React/TypeScript/Vite foundation in `frontend/`;
-Step13 implements authentication UI and API integration after deciding token
-storage based on web security. Both are implemented; Step13 uses sessionStorage.
+The React/TypeScript/Vite client lives in `frontend/`. Token storage was
+decided on web-security grounds: the access token is held in sessionStorage.
 Use explicit request/response types, centralized API and authentication layers,
 and Loading/Success/Empty/Error states. Prefer React state, Context and custom
 hooks rather than an upfront global state library.
@@ -44,8 +42,8 @@ hooks rather than an upfront global state library.
 React handles interaction, form input and display; the backend remains the
 authority for permissions, splitting, balances, settlement suggestions and
 database consistency. Do not reproduce these calculations or access PostgreSQL
-directly. Follow AGENT.md's responsive, accessibility and browser-verification
-rules and README's current Step12-20 roadmap.
+directly. Follow the project's responsive, accessibility and browser-verification
+rules described in the README.
 
 ## API Contract and Versioning
 
@@ -86,7 +84,7 @@ trimmed, case-sensitive,1-50 ASCII letters/digits/underscore.
 
 JWT expires (default30 minutes); there is no refresh endpoint. On401, stop
 using the credential and ask for login. Local logout discards the token, not
-server-side revocation. Step13 stores only the access token in sessionStorage;
+server-side revocation. The client stores only the access token in sessionStorage;
 restores identity through /me on reload and clears invalid sessions on401.
 Transient restore failures retain the token but do not unlock protected pages.
 Same-origin JavaScript/XSS can read sessionStorage; no production security claim.

@@ -105,7 +105,7 @@ describe('Register and login pages', () => {
     const view = mount('/login')
     fill()
     await userEvent.click(screen.getByRole('button', { name: 'Log in' }))
-    expect(await screen.findByRole('heading', { name: 'Trips' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Account menu for/ })).toBeInTheDocument()
     expect(sessionStorage.getItem(TOKEN_KEY)).toBe('opaque-test-token')
     expect(document.body.textContent).not.toContain('opaque-test-token')
     expect(localStorage.length).toBe(0)
@@ -127,9 +127,9 @@ describe('Register and login pages', () => {
     fill()
     await userEvent.click(screen.getByRole('button', { name: 'Log in' }))
     expect(screen.getByRole('button', { name: 'Signing in...' })).toBeDisabled()
-    expect(screen.queryByRole('heading', { name: 'Trips' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Account menu for/ })).not.toBeInTheDocument()
     await act(async () => resolve(json(user)))
-    expect(await screen.findByRole('heading', { name: 'Trips' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Account menu for/ })).toBeInTheDocument()
   })
 
   it.each([

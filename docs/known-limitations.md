@@ -1,7 +1,7 @@
 # Known Limitations
 
-Step 11 hardens the implemented MVP surface. It is not a claim that the service
-is production secure, production deployed, or that the full-stack web MVP is done.
+This document records the known gaps of the implemented MVP surface. It is not
+a claim that the service is production secure or feature complete.
 
 ## Identity and Security
 
@@ -74,8 +74,6 @@ is production secure, production deployed, or that the full-stack web MVP is don
   was added. Existing dependency ranges are not a reproducible deployment lock.
 - DB engine/factory settings are cached; restart after changing configuration.
   JWT keys must be stable and shared across workers.
-- All repository files were untracked when Step 11 was reviewed; no commit was
-  made by this task. `.gitignore` protects local secrets and AppleDouble files.
 
 ## Place Search (Map P3)
 
@@ -141,22 +139,16 @@ is production secure, production deployed, or that the full-stack web MVP is don
 
 ## Client Status
 
-The React + TypeScript + Vite foundation and Step13 authentication UI are
-user-accepted. Step14 Trip management and Step15 collaboration/itinerary UI are
-implemented and integration-tested; their user browser acceptance is pending.
-Step12 covers the foundation; Step13 covers authentication UI/API integration
-and a web-security-informed token storage decision; subsequent steps add the
-business screens, E2E polish, deployment and demo. Steps14-16 are implemented;
-Steps17-20 are NOT STARTED.
+The React + TypeScript + Vite client covers authentication, trip management,
+members and invitations, the shared itinerary, the collaborative map, expenses
+and balances; it is deployed and user-accepted.
 The client uses centralized base URL/API/auth layers and typed contracts.
 Tokens are held in sessionStorage, which same-origin JavaScript/XSS can read.
 Refresh restores through /me, but there is no refresh token, token revocation,
 OAuth, MFA, password reset or email verification. Logout removes a client-held
 token only. Tab duplication/restoration may preserve or copy session state.
 The UI reacts to rejected authenticated requests; it does not continuously
-poll for token expiration. Backend authorization remains mandatory. Step14/15
-provide Trip management, members, invitations, shared itinerary, expenses and
-balances. The financial UI remains dependent on backend-calculated results and
-does not provide payment processing.
-HarmonyOS is deferred to potential native/mobile future work.
+poll for token expiration. Backend authorization remains mandatory. The
+financial UI remains dependent on backend-calculated results and does not
+provide payment processing.
 This document records constraints, not permission to implement them now.
