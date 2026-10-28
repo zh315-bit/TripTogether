@@ -2,9 +2,11 @@
 import json
 import logging
 
+import pytest
+
 from fastapi.testclient import TestClient
 
-from app.core.logging import JsonFormatter, RequestIdFilter, log_format, request_id_var
+from app.core.logging import JsonFormatter, RequestIdFilter, log_format, request_id_var, route_template
 from app.main import app
 from test_membership import collaboration
 
@@ -79,3 +81,24 @@ def test_log_format_defaults(monkeypatch):
     assert log_format("production") == "json" and log_format("development") == "text"
     monkeypatch.setenv("LOG_FORMAT", "JSON")
     assert log_format("development") == "json"
+
+
+class FakeRoute:
+    def __init__(self, path):
+        self.path = path
+
+
+@pytest.mark.parametrize("raw,template,expected", [
+    # Older Starlette: the route carries the full template.
+    ("/api/v1/trips/42", "/api/v1/trips/{trip_id}", "/api/v1/trips/{trip_id}"),
+    # Newer Starlette: only the inner router's part; the prefix is taken from the raw path.
+    ("/api/v1/trips/42", "/trips/{trip_id}", "/api/v1/trips/{trip_id}"),
+    ("/api/v1/trips/42/expenses/7", "/{expense_id}", "/api/v1/trips/42/expenses/{expense_id}"),
+    ("/trips/42", "/trips/{trip_id}", "/trips/{trip_id}"),
+    ("/health", "/health", "/health"),
+    ("/api/v1/trips/42", None, "/api/v1/trips/42"),
+    ("/x", "/a/b/c", "/x"),
+])
+def test_route_template_keeps_the_mount_prefix(raw, template, expected):
+    scope = {"path": raw, "route": FakeRoute(template) if template else None}
+    assert route_template(scope) == expected

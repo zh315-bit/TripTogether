@@ -71,6 +71,26 @@ def configure_logging() -> None:
         logging.getLogger(name).setLevel(logging.WARNING)
 
 
+def route_template(scope: Scope) -> str:
+    """The matched route's template with the mount prefix, e.g. `/api/v1/trips/{trip_id}`.
+
+    Starlette puts the matched route in `scope["route"]`; depending on the
+    version its path is the full template or only the inner router's part, so
+    the template is aligned against the raw path from the right and whatever
+    the raw path has in front of it (the `/api/v1` prefix) is kept.
+    """
+    path = scope["path"]
+    template = getattr(scope.get("route"), "path", None)
+    if not template:
+        return path
+    raw_parts = path.strip("/").split("/")
+    template_parts = template.strip("/").split("/")
+    if len(template_parts) > len(raw_parts):
+        return path
+    prefix = raw_parts[:len(raw_parts) - len(template_parts)]
+    return "/" + "/".join(prefix + template_parts)
+
+
 class RequestLogMiddleware:
     """Give every request an id, echo it as X-Request-ID, and log one access line.
 
@@ -106,10 +126,9 @@ class RequestLogMiddleware:
             duration_ms = round((time.perf_counter() - started) * 1000, 1)
             path = scope["path"]
             if path not in UNLOGGED_PATHS:
-                route = scope.get("route")
                 fields = {
                     "event": "request", "method": scope["method"],
-                    "path": getattr(route, "path", None) or path,
+                    "path": route_template(scope),
                     "status": status, "duration_ms": duration_ms,
                 }
                 level = logging.WARNING if duration_ms >= SLOW_REQUEST_MS else logging.INFO
