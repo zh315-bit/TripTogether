@@ -550,6 +550,19 @@ describe('day route panel anchors', () => {
     expect(await screen.findByText('new@example.com')).toBeInTheDocument()
   })
 
+  it('offers the other demo members as new windows when this tab is a demo session', async () => {
+    sessionStorage.setItem('triptogether.demoMember', 'mika')
+    const { fetcher } = server()
+    await openMap(fetcher)
+    expect(await screen.findByText(/Demo as Mika/)).toBeInTheDocument()
+    const jonas = screen.getByRole('link', { name: 'Open as Jonas ↗' })
+    expect(jonas).toHaveAttribute('href', '/demo?as=jonas')
+    expect(jonas).toHaveAttribute('target', '_blank')
+    expect(screen.getByRole('link', { name: 'Open as Aiko ↗' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Open as Mika ↗' })).not.toBeInTheDocument()
+    sessionStorage.removeItem('triptogether.demoMember')
+  })
+
   it('reconnects after the server closes the stream and refetches everything', async () => {
     const { fetcher, state } = server()
     await openMap(fetcher)

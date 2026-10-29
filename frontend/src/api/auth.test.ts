@@ -57,6 +57,21 @@ describe('Auth API contracts', () => {
 })
 
 
+describe('demo sign-in adapter', () => {
+  it('posts the member and validates the response shape', async () => {
+    const { demoLogin } = await import('./auth')
+    const good = { access_token: 'tok', token_type: 'bearer', member: 'jonas', username: 'jonas_demo', trip_id: 9 }
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(good)))
+    vi.stubGlobal('fetch', fetcher)
+    await expect(demoLogin('jonas')).resolves.toEqual(good)
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ member: 'jonas' })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...good, member: 'root' }))))
+    await expect(demoLogin('mika')).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...good, trip_id: '9' }))))
+    await expect(demoLogin('mika')).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  })
+})
+
 describe('session and password reset adapters', () => {
   it('keeps the refresh token from login and exchanges it at /auth/refresh', async () => {
     const pair = { access_token: 'a1', token_type: 'bearer', refresh_token: 'r1' }

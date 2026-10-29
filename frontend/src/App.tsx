@@ -5,6 +5,7 @@ import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { AccountPage } from './pages/AccountPage'
 import { ForgotPasswordPage, ResetPasswordPage } from './pages/PasswordResetPages'
+import { DemoPage, TryDemoButton } from './pages/DemoPage'
 import { LogoutButton } from './components/LogoutButton'
 import { WorkspacePage } from './workspace/WorkspacePage'
 import tripTogetherLogo from './assets/triptogether-logo.png'
@@ -56,9 +57,11 @@ function HomePage() {
         <h1 id="page-title">Plan together.<br /><em>Travel lighter.</em></h1>
         <p className="landing-copy">Pin the places everyone wants to see on one shared map, shape each day into a route, and split costs without a spreadsheet.</p>
         <div className="actions landing-actions">
-          <Link className="primary-button" to="/register">Start planning</Link>
-          <Link className="retry-button" to="/login">Log in</Link>
+          <TryDemoButton />
+          <Link className="retry-button" to="/register">Start planning</Link>
+          <Link className="text-link landing-login" to="/login">Log in</Link>
         </div>
+        <p className="landing-demo-hint muted-copy">The demo opens a shared Kyoto trip as Mika; open a second window as Jonas to watch changes arrive live.</p>
       </div>
       <figure className="landing-preview" aria-label="TripTogether product preview: a shared trip map with a three-stop day route">
         <div className="preview-top"><span className="preview-kicker">Tokyo · 4 travelers</span><span className="preview-stamp">Day 1</span></div>
@@ -106,6 +109,7 @@ function App() {
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/demo" element={<DemoPage />} />
             <Route element={<ProtectedRoute />}>
               <Route path="/account" element={<AccountPage />} />
             </Route>

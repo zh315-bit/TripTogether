@@ -57,6 +57,7 @@ trips, memberships, itineraries, expenses, balances, and settlements.
    | `MAIL_BACKEND` + `SMTP_*` | `smtp` with host, port, credentials and sender to enable password reset; without it the route answers 503 and everything else works | Password: Yes |
    | `PASSWORD_RESET_URL` | optional; defaults to the first CORS origin plus `/reset-password?token={token}` | No |
    | `REFRESH_TOKEN_EXPIRE_DAYS` | optional; default `30` | No |
+   | `DEMO_MODE` | optional; `1` enables the public demo sign-in (`POST /auth/demo`) with a self-resetting trip | No |
    | `GEOCODER_PROVIDER` | optional; `disabled` (default) or `nominatim` | No |
    | `GEOCODER_USER_AGENT` | **required when `nominatim`**: app name plus a monitored contact | No |
    | `GEOCODER_BASE_URL` | optional; default `https://nominatim.openstreetmap.org`, HTTPS only | No |

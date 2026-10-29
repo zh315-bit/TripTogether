@@ -14,6 +14,9 @@ a claim that the service is production secure or feature complete.
 - Registration duplicate errors and inviting registered emails disclose account
   existence. Login uses one generic credential error and dummy hash verification,
   but this is not a formal constant-time or enumeration-proof guarantee.
+- The demo trip is shared by every visitor and rebuilt every six hours (or by
+  `scripts/reset_demo.py`); two visitors at once see each other's edits, which
+  is the point, but there is no per-visitor sandbox.
 - Refresh tokens live in `sessionStorage` on the web client, so a session
   ends with the tab; there is no "remember me" cookie. Rotation detects a
   replayed token and revokes that family, but cannot tell which party was

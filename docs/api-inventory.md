@@ -45,7 +45,7 @@ is recipient identity, not a Trip role. Forbidden resources remain hidden404.
 
 ## Official Client API After Step 11
 
-43 documented operations: Auth7, Trips5, Members1, Invitations4, Itinerary8,
+44 documented operations: Auth8, Trips5, Members1, Invitations4, Itinerary8,
 Expenses5, Balances1, Settlements3, Places5, Geocoding1, Events1, System2. Counts are method/path pairs, not distinct URLs.
 All official success schemas retain their original fields. All listed errors
 use APIErrorResponse; generic unexpected500 and infrastructure503 can occur on
@@ -62,6 +62,7 @@ same envelope inside `/api/v1`.
 | POST | /api/v1/auth/logout | No | Public | RefreshRequest | 204 empty | 422,503 |
 | POST | /api/v1/auth/password/forgot | No | Public | ForgotPasswordRequest | 202 `{status: accepted}` | 422,429,503 |
 | POST | /api/v1/auth/password/reset | No | Public | ResetPasswordRequest | 204 empty | 400,422,429,503 |
+| POST | /api/v1/auth/demo | No | Public (DEMO_MODE only) | DemoLogin `{member: mika\|jonas\|aiko}` | 200 DemoTokenResponse (+ username, trip_id) | 404,422,429,503 |
 | GET | /api/v1/auth/me | JWT | Current user | None | 200 UserResponse | 401,503 |
 | POST | /api/v1/trips | JWT | Any user | TripCreate | 201 TripResponse | 401,422,503 |
 | GET | /api/v1/trips | JWT | Owned/joined only | None | 200 TripResponse[] | 401,503 |
@@ -148,13 +149,13 @@ Do not count preflight, automatic slash redirects or HEAD as new business APIs.
 | 400 | INVALID_RESET_TOKEN, BAD_REQUEST (fallback) |
 | 401 | INVALID_CREDENTIALS, INVALID_REFRESH_TOKEN |
 | 403 | FORBIDDEN (fallback; resource policy currently uses404) |
-| 404 | SETTLEMENT_NOT_FOUND, TRIP_NOT_FOUND, INVITATION_NOT_FOUND, INVITEE_NOT_FOUND, ITINERARY_NOT_FOUND, EXPENSE_NOT_FOUND, NOT_FOUND |
+| 404 | DEMO_DISABLED, SETTLEMENT_NOT_FOUND, TRIP_NOT_FOUND, INVITATION_NOT_FOUND, INVITEE_NOT_FOUND, ITINERARY_NOT_FOUND, EXPENSE_NOT_FOUND, NOT_FOUND |
 | 405 | METHOD_NOT_ALLOWED |
 | 409 | USERNAME_ALREADY_EXISTS, EMAIL_ALREADY_EXISTS, TRIP_ITINERARY_CONFLICT, INVITATION_CONFLICT, EXPENSE_CURRENCY_CONFLICT, SETTLEMENT_CURRENCY_CONFLICT, LEDGER_INCONSISTENT |
 | 422 | VALIDATION_ERROR |
 | 429 | RATE_LIMITED (`Retry-After` seconds), GEOCODER_BUSY |
 | 500 | INTERNAL_ERROR |
-| 503 | SETTLEMENTS_UNAVAILABLE, PASSWORD_RESET_UNAVAILABLE, RATE_LIMITER_UNAVAILABLE, REGISTRATION_UNAVAILABLE, AUTHENTICATION_UNAVAILABLE, TRIPS_UNAVAILABLE, INVITATIONS_UNAVAILABLE, ITINERARY_UNAVAILABLE, EXPENSES_UNAVAILABLE, BALANCES_UNAVAILABLE, DATABASE_UNAVAILABLE, NOT_READY, SERVICE_UNAVAILABLE (fallback) |
+| 503 | DEMO_UNAVAILABLE, SETTLEMENTS_UNAVAILABLE, PASSWORD_RESET_UNAVAILABLE, RATE_LIMITER_UNAVAILABLE, REGISTRATION_UNAVAILABLE, AUTHENTICATION_UNAVAILABLE, TRIPS_UNAVAILABLE, INVITATIONS_UNAVAILABLE, ITINERARY_UNAVAILABLE, EXPENSES_UNAVAILABLE, BALANCES_UNAVAILABLE, DATABASE_UNAVAILABLE, NOT_READY, SERVICE_UNAVAILABLE (fallback) |
 
 Codes are assigned at business raise sites, not inferred from English strings.
 Validation uses one stable code with useful field details rather than a giant

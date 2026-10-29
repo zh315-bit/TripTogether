@@ -155,6 +155,16 @@ sums. Each returned split carries `weight` (null unless `shares`).
 `BalanceResponse.settlement` reports `transfers`, `unsettled_members` and
 `minimal`; show the suggestions as they are, they are already the fewest.
 
+## Demo sign-in
+
+When the server runs with `DEMO_MODE`, `POST /auth/demo` with `{"member":
+"mika" | "jonas" | "aiko"}` returns a bearer token plus `username` and the
+shared `trip_id`; without it the route is `404 DEMO_DISABLED`. The web client
+puts **Try the demo** on the landing page and, in a demo session, offers
+`/demo?as=<member>` links that open a second window as another member. The
+demo trip is rebuilt when it is more than six hours old, so nothing a visitor
+does needs cleaning up.
+
 ## Recorded payments
 
 `GET /trips/{id}/balances` now includes `settled` per member and already

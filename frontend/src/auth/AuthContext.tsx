@@ -2,8 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { ReactNode } from 'react'
 import * as authApi from '../api/auth'
 import { ApiError, apiFetch, apiStream } from '../api/client'
-import type { LoginRequest, User } from '../types/auth'
-import { tokenStorage } from './tokenStorage'
+import type { DemoMember, LoginRequest, User } from '../types/auth'
+import { DEMO_KEY, tokenStorage } from './tokenStorage'
 
 type AuthState =
   | { status: 'loading' | 'anonymous'; user: null }
@@ -13,6 +13,12 @@ type AuthState =
 type AuthContextValue = {
   state: AuthState
   login: (payload: LoginRequest, signal: AbortSignal) => Promise<void>
+  /**
+   * Signs in as a demo member. `onSignedIn` runs with the demo trip's id right
+   * before the session state changes, so the caller can navigate in the same
+   * render instead of racing the authenticated redirects.
+   */
+  loginDemo: (member: DemoMember, signal: AbortSignal, onSignedIn?: (tripId: number) => void) => Promise<number>
   logout: () => void
   restore: () => Promise<void>
   request: <T>(path: string, init?: RequestInit) => Promise<T>
@@ -31,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearSession = useCallback(() => {
     token.current = null
     try {
+      sessionStorage.removeItem(DEMO_KEY)
       tokenStorage.clear()
       setState(anonymous)
     } catch (error) {
@@ -124,6 +131,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [clearSession])
 
+  const loginDemo = useCallback(async (
+    member: DemoMember, signal: AbortSignal, onSignedIn?: (tripId: number) => void,
+  ) => {
+    operation.current?.abort()
+    const controller = new AbortController()
+    operation.current = controller
+    const combined = AbortSignal.any([controller.signal, signal])
+    try {
+      const response = await authApi.demoLogin(member, combined)
+      combined.throwIfAborted()
+      tokenStorage.write(response.access_token)
+      tokenStorage.writeRefresh(response.refresh_token ?? null)
+      sessionStorage.setItem(DEMO_KEY, response.member)
+      token.current = response.access_token
+      const user = await authApi.getCurrentUser(response.access_token, combined)
+      combined.throwIfAborted()
+      onSignedIn?.(response.trip_id)
+      setState({ status: 'authenticated', user })
+      return response.trip_id
+    } catch (error) {
+      if (operation.current === controller && !controller.signal.aborted) clearSession()
+      throw error
+    }
+  }, [clearSession])
+
   const request = useCallback(async <T,>(path: string, init?: RequestInit): Promise<T> => {
     const credential = token.current
     const currentOperation = operation.current
@@ -164,7 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [logout])
 
-  return <AuthContext.Provider value={{ state, login, logout, restore, request, stream }}>
+  return <AuthContext.Provider value={{ state, login, loginDemo, logout, restore, request, stream }}>
     {children}
   </AuthContext.Provider>
 }

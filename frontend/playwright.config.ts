@@ -36,11 +36,13 @@ export default defineConfig({
       env: {
         APP_ENV: 'development',
         GEOCODER_PROVIDER: 'fake',
-        CORS_ORIGINS: JSON.stringify([APP]),
+        // localhost is a second origin for the demo recording's side-by-side windows.
+        CORS_ORIGINS: JSON.stringify([APP, APP.replace('127.0.0.1', 'localhost')]),
         // The suite registers and signs in far faster than a person; the
         // brute-force limits have their own backend tests.
         RATE_LIMIT_LOGIN: 'off',
         RATE_LIMIT_REGISTER: 'off',
+        DEMO_MODE: '1',
       },
     },
     {

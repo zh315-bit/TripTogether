@@ -11,14 +11,15 @@ from app.core.security import create_access_token
 from app.db.session import get_db
 from app.models import User
 from app.schemas.user import (
-    AcceptedResponse, ForgotPasswordRequest, RefreshRequest, ResetPasswordRequest, TokenResponse,
-    UserLogin, UserRegister, UserResponse,
+    AcceptedResponse, DemoLogin, DemoTokenResponse, ForgotPasswordRequest, RefreshRequest,
+    ResetPasswordRequest, TokenResponse, UserLogin, UserRegister, UserResponse,
 )
 from app.services.authentication import (
     AuthenticationUnavailableError,
     InvalidCredentialsError,
     authenticate_user,
 )
+from app.services.demo import DemoDisabledError, DemoUnavailableError, demo_session
 from app.services.rate_limiting import RateLimitUnavailableError
 from app.services.sessions import (
     InvalidRefreshTokenError, InvalidResetTokenError, SessionsUnavailableError,
@@ -189,6 +190,42 @@ def reset_password_route(
         raise APIError(status_code=503, detail="Password reset temporarily unavailable",
                        code="PASSWORD_RESET_UNAVAILABLE") from None
     return Response(status_code=204, headers={"Cache-Control": "no-store"})
+
+
+@router.post(
+    "/demo",
+    response_model=DemoTokenResponse,
+    summary="Sign in as a demo member",
+    responses={
+        404: {"model": APIErrorResponse},
+        422: {"model": APIErrorResponse},
+        429: {"model": APIErrorResponse},
+        503: {"model": APIErrorResponse},
+    },
+)
+def demo(
+    payload: DemoLogin, request: Request, response: Response, db: Session = Depends(get_db),
+) -> DemoTokenResponse:
+    """Issues a session for one of three demo members sharing a ready-made trip.
+
+    Only available when DEMO_MODE is set. The trip is rebuilt when it is more
+    than six hours old, so visitors can edit freely. Counted against the login limit.
+    """
+    try:
+        enforce_rate_limit("login", request, db)
+        session = demo_session(db, payload.member)
+        token = create_access_token(session.user.id)
+        refresh = issue_refresh_token(db, session.user.id)
+        db.commit()
+    except DemoDisabledError:
+        raise APIError(status_code=404, detail="The demo is not enabled", code="DEMO_DISABLED") from None
+    except (DemoUnavailableError, RateLimitUnavailableError, SessionsUnavailableError,
+            JWTConfigurationError, ValueError):
+        raise APIError(status_code=503, detail="Demo temporarily unavailable",
+                       code="DEMO_UNAVAILABLE") from None
+    response.headers["Cache-Control"] = "no-store"
+    return DemoTokenResponse(access_token=token, refresh_token=refresh, member=payload.member,
+                             username=session.user.username, trip_id=session.trip_id)
 
 
 @router.get(

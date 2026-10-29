@@ -11,6 +11,10 @@ A full-stack web app where a small group plans a trip on a shared map, keeps one
 
 **Live demo:** <https://trip-together-zeta.vercel.app> · **API health:** <https://triptogether-api.onrender.com/health>
 
+![Two windows side by side: Mika adds an itinerary item and it appears in Jonas's window with a notice; then Jonas's balances show three members settled in two transfers](docs/screenshots/live-demo.gif)
+
+**Try it in 10 seconds:** press **Try the demo** on the landing page. It signs you in as Mika on a seeded Kyoto trip (three members, five places, a routed itinerary, expenses split three ways). Use **Open as Jonas** in the sidebar to open a second window and watch an edit in one appear in the other. The demo trip rebuilds itself every six hours.
+
 ![TripTogether map workspace: trip switcher, sidebar tools, member-coloured places and the day's route](docs/screenshots/workspace-desktop.jpg)
 
 ## Highlights

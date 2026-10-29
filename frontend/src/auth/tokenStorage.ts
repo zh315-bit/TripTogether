@@ -3,6 +3,8 @@ import { ApiError } from '../api/client'
 export const TOKEN_KEY = 'triptogether.accessToken'
 /** The opaque refresh token from login; exchanged once at /auth/refresh when the access token expires. */
 export const REFRESH_KEY = 'triptogether.refreshToken'
+/** Which demo member this tab is signed in as, so the workspace can offer the others. */
+export const DEMO_KEY = 'triptogether.demoMember'
 
 export const tokenStorage = {
   read(): string | null {

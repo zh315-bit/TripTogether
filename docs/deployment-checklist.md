@@ -22,6 +22,7 @@ credential, account, or deployment command that creates cloud resources.
 | `MAIL_BACKEND` | No | `smtp` for password reset | No | `log` (default) is refused in production: `/auth/password/forgot` answers 503 until SMTP is configured |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | No | With `smtp` | Password: Yes | your provider's values; STARTTLS on by default |
 | `PASSWORD_RESET_URL` | No | Optional | No | default `<first CORS origin>/reset-password?token={token}` |
+| `DEMO_MODE` | No | Optional | No | `1` enables `POST /auth/demo` and the landing page's **Try the demo**; the seeded trip rebuilds every 6 h |
 | `GEOCODER_PROVIDER` | No | Optional | No | `disabled` (default) or `nominatim` |
 | `GEOCODER_USER_AGENT` | No | Required if `nominatim` | No | `TripTogether/1.0 (contact: ops@<your-domain>)` |
 | `GEOCODER_BASE_URL` | No | Optional | No | default `https://nominatim.openstreetmap.org` |

@@ -85,3 +85,15 @@ class UserResponse(BaseModel):
     username: str
     email: str
     created_at: datetime
+
+
+class DemoLogin(BaseModel):
+    """Which demo member to sign in as; the demo trip is shared by all three."""
+    model_config = ConfigDict(extra="forbid")
+    member: Literal["mika", "jonas", "aiko"] = "mika"
+
+
+class DemoTokenResponse(TokenResponse):
+    member: Literal["mika", "jonas", "aiko"]
+    username: str
+    trip_id: int
