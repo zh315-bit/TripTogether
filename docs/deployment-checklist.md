@@ -18,6 +18,7 @@ credential, account, or deployment command that creates cloud resources.
 | `RATE_LIMIT_REGISTER` | No | Optional | No | `5/60` (default) or `off` |
 | `TRUST_PROXY_HEADERS` | No | Optional | No | default `1` in production: client address from `X-Forwarded-For` |
 | `LOG_FORMAT` | No | Optional | No | default `json` in production, `text` otherwise |
+| `REALTIME_BACKEND` | No | Optional | No | `memory` (default) or `postgres` to relay live updates across instances via LISTEN/NOTIFY |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | No | Optional | No | `30` (default) |
 | `MAIL_BACKEND` | No | `smtp` for password reset | No | `log` (default) is refused in production: `/auth/password/forgot` answers 503 until SMTP is configured |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | No | With `smtp` | Password: Yes | your provider's values; STARTTLS on by default |

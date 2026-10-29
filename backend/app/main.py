@@ -24,7 +24,7 @@ from app.core.config import (
     get_app_settings, get_database_url, get_geocoder_settings, get_jwt_settings,
 )
 from app.core.logging import RequestLogMiddleware, SafeErrorMiddleware, configure_logging
-from app.realtime import broker
+from app.realtime import PostgresRelay, broker, listen_dsn, realtime_backend
 
 
 logger = logging.getLogger("triptogether")
@@ -43,10 +43,21 @@ async def lifespan(application: FastAPI):
             raise RuntimeError("Production configuration invalid") from None
     # Request threads publish through this loop; streams end when it closes.
     broker.bind(asyncio.get_running_loop())
+    relay_task = None
+    if realtime_backend() == "postgres":
+        # Live updates cross instances through PostgreSQL; see app/realtime.py.
+        application.state.relay = PostgresRelay(listen_dsn(), broker)
+        relay_task = asyncio.get_running_loop().create_task(application.state.relay.run())
     logger.info("Application startup")
     try:
         yield
     finally:
+        if relay_task is not None:
+            relay_task.cancel()
+            try:
+                await relay_task
+            except (asyncio.CancelledError, Exception):
+                pass
         broker.close()
         logger.info("Application shutdown")
 

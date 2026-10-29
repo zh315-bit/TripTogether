@@ -54,6 +54,7 @@ trips, memberships, itineraries, expenses, balances, and settlements.
    | `RATE_LIMIT_LOGIN` / `RATE_LIMIT_REGISTER` | optional; `10/60` and `5/60` by default, `off` to disable | No |
    | `TRUST_PROXY_HEADERS` | optional; default `1` in production so `X-Forwarded-For` names the client | No |
    | `LOG_FORMAT` | optional; `json` (default in production) or `text` | No |
+   | `REALTIME_BACKEND` | optional; `memory` (default, one instance) or `postgres` (LISTEN/NOTIFY relay for several instances; holds one open connection per instance) | No |
    | `MAIL_BACKEND` + `SMTP_*` | `smtp` with host, port, credentials and sender to enable password reset; without it the route answers 503 and everything else works | Password: Yes |
    | `PASSWORD_RESET_URL` | optional; defaults to the first CORS origin plus `/reset-password?token={token}` | No |
    | `REFRESH_TOKEN_EXPIRE_DAYS` | optional; default `30` | No |
