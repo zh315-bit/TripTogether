@@ -17,7 +17,11 @@ a claim that the service is production secure or feature complete.
 - The demo trip is shared by every visitor and rebuilt every six hours (or by
   `scripts/reset_demo.py`); two visitors at once see each other's edits, which
   is the point, but there is no per-visitor sandbox.
-- Rate limiting covers login and registration only, as a fixed window per
+- Refresh tokens live in `sessionStorage` on the web client, so a session
+  ends with the tab; there is no "remember me" cookie. Rotation detects a
+  replayed token and revokes that family, but cannot tell which party was
+  legitimate. Password reset needs SMTP; without it the route answers 503.
+- Rate limiting covers login, registration and password reset only, as a fixed window per
   client address (burstier than a token bucket; up to 2x the rule at a window
   edge). Behind a proxy it trusts the first `X-Forwarded-For` address, which
   is only sound when the proxy overwrites the header, as Render does. No
@@ -53,8 +57,9 @@ a claim that the service is production secure or feature complete.
   that must add up to the total; there are no percentages (express them as
   shares). Cents are apportioned by the largest-remainder method, ties to the
   lowest user ID. Balances use the stored exact shares.
-- Settlement suggestions are derived calculations, not payment processing or
-  repayment history. The transfer count is provably minimal while at most 14
+- Settlement suggestions are derived calculations, not payment processing.
+  Recorded payments are member-entered and trusted; there is no confirmation
+  by the receiving member. The transfer count is provably minimal while at most 14
   members have a nonzero balance (exact zero-sum partition search); above that
   the response says `minimal: false` and a greedy plan of at most n - 1
   transfers is returned.

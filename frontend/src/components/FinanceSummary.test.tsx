@@ -9,9 +9,9 @@ const stamp = '2026-09-20T00:00:00Z'
 const balance = {
   trip_id: 12, currency: 'USD',
   members: [
-    { user_id: 1, username: 'Person1', paid: '100.00', share: '33.34', balance: '66.66' },
-    { user_id: 2, username: 'Person2', paid: '0.00', share: '33.33', balance: '-33.33' },
-    { user_id: 3, username: 'Person3', paid: '33.33', share: '33.33', balance: '0.00' },
+    { user_id: 1, username: 'Person1', paid: '100.00', share: '33.34', settled: '0.00', balance: '66.66' },
+    { user_id: 2, username: 'Person2', paid: '0.00', share: '33.33', settled: '0.00', balance: '-33.33' },
+    { user_id: 3, username: 'Person3', paid: '33.33', share: '33.33', settled: '0.00', balance: '0.00' },
   ],
   suggested_settlements: [{ from_user_id: 2, to_user_id: 1, amount: '33.33' }],
   settlement: { transfers: 1, unsettled_members: 2, minimal: true },
@@ -64,7 +64,7 @@ it('explains the empty state before the first expense', async () => {
   mount(1, {
     ...balance, currency: null, suggested_settlements: [],
     settlement: { transfers: 0, unsettled_members: 0, minimal: true },
-    members: balance.members.map((member) => ({ ...member, paid: '0.00', share: '0.00', balance: '0.00' })),
+    members: balance.members.map((member) => ({ ...member, paid: '0.00', share: '0.00', settled: '0.00', balance: '0.00' })),
   })
   expect(await screen.findByText(/No expenses yet\. Your share and balance appear here/)).toBeInTheDocument()
   expect(screen.queryByRole('region', { name: 'Your expense summary' })).not.toBeInTheDocument()

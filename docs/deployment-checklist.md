@@ -18,6 +18,10 @@ credential, account, or deployment command that creates cloud resources.
 | `RATE_LIMIT_REGISTER` | No | Optional | No | `5/60` (default) or `off` |
 | `TRUST_PROXY_HEADERS` | No | Optional | No | default `1` in production: client address from `X-Forwarded-For` |
 | `LOG_FORMAT` | No | Optional | No | default `json` in production, `text` otherwise |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | No | Optional | No | `30` (default) |
+| `MAIL_BACKEND` | No | `smtp` for password reset | No | `log` (default) is refused in production: `/auth/password/forgot` answers 503 until SMTP is configured |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | No | With `smtp` | Password: Yes | your provider's values; STARTTLS on by default |
+| `PASSWORD_RESET_URL` | No | Optional | No | default `<first CORS origin>/reset-password?token={token}` |
 | `DEMO_MODE` | No | Optional | No | `1` enables `POST /auth/demo` and the landing page's **Try the demo**; the seeded trip rebuilds every 6 h |
 | `GEOCODER_PROVIDER` | No | Optional | No | `disabled` (default) or `nominatim` |
 | `GEOCODER_USER_AGENT` | No | Required if `nominatim` | No | `TripTogether/1.0 (contact: ops@<your-domain>)` |
@@ -74,12 +78,12 @@ What the defaults mean:
    as the single migration command. Render Free has no Pre-Deploy Command, so
    run it manually from a trusted environment using the Render database URL;
    do not store that URL in the repository or shell history. Then run
-   `python -m alembic current` and confirm `0010 (head)` for this release. Never
+   `python -m alembic current` and confirm `0012 (head)` for this release. Never
    put migrations in the web start command or run them in each worker. For an
    existing production database, follow "Releasing a schema change" below.
 7. Set Render's HTTP health check path to `/ready`. It verifies JWT
    configuration, PostgreSQL connectivity, that the database revision matches
-   the application's single Alembic head, and that all nine core tables
+   the application's single Alembic head, and that all eleven core tables
    exist. `/health` is liveness only and never accesses the database. A 503
    means readiness checks failed.
 8. After Render reports healthy, record its HTTPS `onrender.com` API origin.
@@ -139,7 +143,7 @@ Pre-Deploy Command:
    `/ready` to `/health`.
 4. From a trusted environment with the production `DATABASE_URL`, run
    `APP_ENV=production python -m alembic upgrade head` using the **new** code,
-   then `python -m alembic current` and confirm `0010 (head)`.
+   then `python -m alembic current` and confirm `0012 (head)`.
 5. Merge to `main` and wait for the Render and Vercel auto-deploys to finish.
 6. Check that `https://<render-service>/ready` returns 200, then change the
    health check path back to `/ready`.
@@ -148,7 +152,7 @@ Pre-Deploy Command:
 Why this order:
 
 - `/ready` requires the database revision to equal the **running code's**
-  Alembic head. The old backend only accepts `0009`, and the new backend only
+  Alembic head. The old backend only accepts `0011`, and the new backend only
   accepts `0010`. Whichever runs first, one of them would fail readiness
   during the switch-over; using `/health` for that window keeps Render from
   treating the healthy old service, or the incoming new deploy, as failed.

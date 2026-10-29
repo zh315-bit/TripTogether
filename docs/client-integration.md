@@ -165,6 +165,29 @@ puts **Try the demo** on the landing page and, in a demo session, offers
 demo trip is rebuilt when it is more than six hours old, so nothing a visitor
 does needs cleaning up.
 
+## Recorded payments
+
+`GET /trips/{id}/balances` now includes `settled` per member and already
+accounts for recorded payments. To mark a suggestion as paid, `POST
+/trips/{id}/settlements` with its `from_user_id`, `to_user_id`, `amount`,
+the trip's `currency` and `paid_on`; then refetch the balances (a
+`settlement.created` event also arrives on the stream). `GET` lists the
+payments newest first; `DELETE` removes one.
+
+## Sessions and password reset
+
+Keep both tokens from login. Send the access token as Bearer; when a request
+answers 401 (expiry), call `POST /auth/refresh` with the refresh token once,
+store the returned pair and retry. A 401 from `/auth/refresh` means the session
+is over: clear both tokens and show the login page. Call `POST /auth/logout`
+with the refresh token on sign-out. The web client keeps both in
+`sessionStorage`, so closing the tab ends the session on that device.
+
+Password reset: `POST /auth/password/forgot` with the email always answers
+202; the mailed link opens `/reset-password?token=…`, whose form posts
+`POST /auth/password/reset {token, password}`. A 400 `INVALID_RESET_TOKEN`
+means the link was used, replaced or expired: offer to send a new one.
+
 ## Rate limits and request ids
 
 Login and registration answer `429 RATE_LIMITED` with `Retry-After` (seconds)

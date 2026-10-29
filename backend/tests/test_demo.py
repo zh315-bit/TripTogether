@@ -23,6 +23,9 @@ def test_demo_session_seeds_once_and_shares_the_trip(collaboration, monkeypatch)
     assert mika.status_code == 200, mika.text
     body = mika.json()
     assert body["member"] == "mika" and body["username"] == "mika_demo" and body["token_type"] == "bearer"
+    # Demo sessions renew like any other: the refresh token rotates at /auth/refresh.
+    renewed = client.post("/api/v1/auth/refresh", json={"refresh_token": body["refresh_token"]})
+    assert renewed.status_code == 200 and renewed.json()["refresh_token"] != body["refresh_token"]
     assert mika.headers["Cache-Control"] == "no-store"
     jonas = client.post("/api/v1/auth/demo", json={"member": "jonas"}).json()
     assert jonas["trip_id"] == body["trip_id"] and jonas["username"] == "jonas_demo"

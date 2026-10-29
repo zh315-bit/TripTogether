@@ -2,7 +2,7 @@ import { ApiError } from './client'
 import { ifMatch } from './trips'
 import type {
   AuthenticatedRequest, Balance, Expense, ExpenseInput, ExpenseSplit,
-  MemberBalance, SettlementSuggestion, SettlementSummary, SplitMethod,
+  MemberBalance, Settlement, SettlementInput, SettlementSuggestion, SettlementSummary, SplitMethod,
 } from '../types/finance'
 
 const SPLIT_METHODS: readonly SplitMethod[] = ['equal', 'shares', 'exact']
@@ -81,7 +81,24 @@ function parseMemberBalance(body: unknown): MemberBalance {
     username: text(value.username, 'username'),
     paid: money(value.paid, 'paid'),
     share: money(value.share, 'share'),
+    settled: money(value.settled, 'settled', true),
     balance: money(value.balance, 'balance', true),
+  }
+}
+
+function parseSettlementRecord(body: unknown): Settlement {
+  const value = object(body)
+  return {
+    id: number(value.id, 'id'),
+    trip_id: number(value.trip_id, 'trip_id'),
+    from_user_id: number(value.from_user_id, 'from_user_id'),
+    to_user_id: number(value.to_user_id, 'to_user_id'),
+    amount: money(value.amount, 'amount'),
+    currency: text(value.currency, 'currency'),
+    paid_on: text(value.paid_on, 'paid_on'),
+    note: value.note === null ? null : text(value.note, 'note'),
+    recorded_by_user_id: number(value.recorded_by_user_id, 'recorded_by_user_id'),
+    created_at: text(value.created_at, 'created_at'),
   }
 }
 
@@ -168,6 +185,24 @@ export function deleteExpense(
   return request<void>(`/api/v1/trips/${encodeURIComponent(tripId)}/expenses/${expenseId}`, {
     method: 'DELETE',
   })
+}
+
+export async function listSettlements(request: AuthenticatedRequest, tripId: string): Promise<Settlement[]> {
+  return parseList(await request<unknown>(
+    `/api/v1/trips/${encodeURIComponent(tripId)}/settlements`), parseSettlementRecord, 'settlements')
+}
+
+export async function recordSettlement(
+  request: AuthenticatedRequest, tripId: string, payload: SettlementInput,
+): Promise<Settlement> {
+  return parseSettlementRecord(await request<unknown>(
+    `/api/v1/trips/${encodeURIComponent(tripId)}/settlements`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) },
+  ))
+}
+
+export function deleteSettlement(request: AuthenticatedRequest, tripId: string, id: number): Promise<void> {
+  return request<void>(`/api/v1/trips/${encodeURIComponent(tripId)}/settlements/${id}`, { method: 'DELETE' })
 }
 
 export async function getBalance(

@@ -44,8 +44,8 @@ def test_openapi_is_complete_and_unique():
         assert client.get("/docs").status_code == 200
     operations = [(path, method, operation) for path, methods in spec["paths"].items()
                   for method, operation in methods.items()]
-    assert len(operations) == 37
-    assert sum(path.startswith(PREFIX + "/") for path, _, _ in operations) == 35
+    assert len(operations) == 44
+    assert sum(path.startswith(PREFIX + "/") for path, _, _ in operations) == 42
     ids = [op["operationId"] for _, _, op in operations]
     assert len(ids) == len(set(ids))
     assert set(spec["paths"]) >= {
@@ -74,7 +74,8 @@ def test_openapi_is_complete_and_unique():
         if method == "delete":
             assert "content" not in op["responses"]["204"]
         if path.startswith(PREFIX) and path not in (
-            PREFIX + "/auth/register", PREFIX + "/auth/login", PREFIX + "/auth/demo",
+            PREFIX + "/auth/register", PREFIX + "/auth/login", PREFIX + "/auth/refresh", PREFIX + "/auth/demo",
+            PREFIX + "/auth/logout", PREFIX + "/auth/password/forgot", PREFIX + "/auth/password/reset",
         ):
             assert op["security"] == [{"BearerAuth": []}]
     for route in app.routes:
@@ -98,7 +99,7 @@ def test_every_protected_v1_operation_rejects_anonymous_before_database():
                         error_contract(response, 401, "INVALID_CREDENTIALS")
                         assert response.headers["www-authenticate"] == "Bearer"
                         checked += 1
-            assert checked == 32
+            assert checked == 35
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -144,7 +145,7 @@ def test_real_v1_client_workflow(registration_client, jwt_environment):
         assert_datetime(user["created_at"])
         login = client.post(PREFIX + "/auth/login", json=credentials)
         assert login.status_code == 200
-        assert set(login.json()) == {"access_token", "token_type"}
+        assert set(login.json()) == {"access_token", "token_type", "refresh_token"}
         assert login.json()["token_type"] == "bearer"
         headers = {"Authorization": "Bearer " + login.json()["access_token"]}
         users[name] = (user, headers)

@@ -18,6 +18,6 @@ export function LoginPage() {
       await login({ email, password }, signal)
       if (!signal.aborted) navigate('/trips', { replace: true })
     }} />
-    <p className="auth-switch">New to TripTogether? <Link to="/register">Create account</Link></p>
+    <p className="auth-switch">New to TripTogether? <Link to="/register">Create account</Link> · <Link to="/forgot-password">Forgot password?</Link></p>
   </section>
 }

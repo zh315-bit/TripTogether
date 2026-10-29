@@ -16,6 +16,7 @@ from app.api.invitations import router as invitations_router
 from app.api.itinerary import route_router as itinerary_route_router, router as itinerary_router
 from app.api.expenses import router as expenses_router
 from app.api.balances import router as balances_router
+from app.api.settlements import router as settlements_router
 from app.api.trip_places import router as trip_places_router
 from app.api.geocode import router as geocode_router
 from app.api.system import router as system_router
@@ -53,7 +54,7 @@ async def lifespan(application: FastAPI):
 def create_app() -> FastAPI:
     settings = get_app_settings()
     application = FastAPI(
-        title="TripTogether", version="1.0.0", lifespan=lifespan,
+        title="TripTogether", version="1.2.0", lifespan=lifespan,
         description="Client API: /api/v1. Bearer JWT; decimal money strings; "
                     "uniform error envelope. Legacy paths remain compatibility aliases.",
         openapi_tags=[
@@ -85,6 +86,7 @@ def create_app() -> FastAPI:
     versioned.include_router(trip_places_router)
     versioned.include_router(geocode_router)
     versioned.include_router(events_router)
+    versioned.include_router(settlements_router)
     # Existing routers describe legacy errors; v1 documents the new envelope.
     for route in versioned.routes:
         if isinstance(route, APIRoute) and route.path.startswith("/api/v1/"):
