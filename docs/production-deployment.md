@@ -9,8 +9,8 @@ migrations 0006 and 0007; the live-collaboration release added 0008 (a
 `version` column with `DEFAULT 1` on trips, itinerary_items, expenses and
 trip_places), the weighted-splits release added 0009 (`split_method` on
 expenses with `DEFAULT 'equal'`, a nullable `weight` on expense_splits) and
-the hardening release adds 0010 (the `rate_limits` table). All are additive
-and harmless to the previous backend; this release expects `0010 (head)`. Release schema changes with
+the hardening release added 0010 (the `rate_limits` table) and the sessions release added 0011 (`auth_tokens`) and the settlements release adds 0012 (`settlements`). All are additive
+and harmless to the previous backend; this release expects `0012 (head)`. Release schema changes with
 [Releasing a schema change](#releasing-a-schema-change-render-free--auto-deploy).
 
 ## Production architecture
@@ -55,6 +55,10 @@ trips, memberships, itineraries, expenses, balances, and settlements.
    | `TRUST_PROXY_HEADERS` | optional; default `1` in production so `X-Forwarded-For` names the client | No |
    | `LOG_FORMAT` | optional; `json` (default in production) or `text` | No |
    | `REALTIME_BACKEND` | optional; `memory` (default, one instance) or `postgres` (LISTEN/NOTIFY relay for several instances; holds one open connection per instance) | No |
+   | `MAIL_BACKEND` + `SMTP_*` | `smtp` with host, port, credentials and sender to enable password reset; without it the route answers 503 and everything else works | Password: Yes |
+   | `PASSWORD_RESET_URL` | optional; defaults to the first CORS origin plus `/reset-password?token={token}` | No |
+   | `REFRESH_TOKEN_EXPIRE_DAYS` | optional; default `30` | No |
+   | `DEMO_MODE` | optional; `1` enables the public demo sign-in (`POST /auth/demo`) with a self-resetting trip | No |
    | `GEOCODER_PROVIDER` | optional; `disabled` (default) or `nominatim` | No |
    | `GEOCODER_USER_AGENT` | **required when `nominatim`**: app name plus a monitored contact | No |
    | `GEOCODER_BASE_URL` | optional; default `https://nominatim.openstreetmap.org`, HTTPS only | No |
@@ -110,12 +114,12 @@ from a trusted environment with the Render database URL supplied as
 `DATABASE_URL`; do not save the URL in the repository or shell history. On a
 Render plan that supports Pre-Deploy Command, configure this as the one
 controlled migration command. Check `python -m alembic current` after the
-migration; this release expects `0010 (head)`. Do not put `alembic upgrade head`
+migration; this release expects `0012 (head)`. Do not put `alembic upgrade head`
 in the web-service start command or run it independently in each worker.
 
 Set Render's health check path to `/ready`. It verifies JWT configuration,
 PostgreSQL connectivity, that the database revision matches the application's
-single Alembic head, and that all nine core tables exist. `/health` is
+single Alembic head, and that all eleven core tables exist. `/health` is
 liveness-only, never accesses the database, and stays 200 even when the schema
 is not ready. `/ready` returns 503 when any readiness check fails.
 
@@ -177,7 +181,7 @@ follow this order exactly:
    ```bash
    cd backend
    APP_ENV=production python -m alembic upgrade head
-   python -m alembic current   # expect: 0010 (head)
+   python -m alembic current   # expect: 0012 (head)
    ```
 
 5. **Merge to `main`.** Wait for the Render backend deploy and the Vercel
@@ -191,8 +195,8 @@ follow this order exactly:
 ### Why this order
 
 - `/ready` only passes when the database revision equals the **running
-  code's** single Alembic head. The old backend accepts only `0009` and the
-  new backend accepts only `0010`, so during the switch-over one of them always
+  code's** single Alembic head. The old backend accepts only `0011` and the
+  new backend accepts only `0012`, so during the switch-over one of them always
   fails readiness. With the health check on `/ready`, Render would mark the
   live old service unhealthy right after the migration, or block the new
   deploy before it. `/health` is liveness-only and stays green for both.
@@ -209,7 +213,7 @@ follow this order exactly:
 
 1. Keep the health check on `/health` and redeploy the previous commit. The
    old backend runs correctly on the new schema; its `/ready` stays 503 while
-   the database is at `0010`.
+   the database is at `0012`.
 2. Only if the schema itself must be removed, run
    `python -m alembic downgrade 0005`. This drops `trip_places` and
    `geocoder_throttle` and the `place_id` column. Itinerary rows and their
@@ -258,7 +262,7 @@ follow this order exactly:
   `DATABASE_URL`, and a JWT key of at least 32 bytes. Inspect Render logs; do
   not paste secrets into logs or tickets.
 - **`/ready` returns 503:** confirm the one controlled Alembic migration has
-  completed (`alembic current` is `0010 (head)`), all nine core tables exist, and
+  completed (`alembic current` is `0012 (head)`), all eleven core tables exist, and
   the database is reachable; `/health` distinguishes API liveness from
   dependency readiness.
 - **Browser CORS error:** confirm `CORS_ORIGINS` is valid JSON with the exact

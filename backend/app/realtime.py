@@ -30,7 +30,7 @@ from app.core.config import _get_setting
 
 logger = logging.getLogger("triptogether")
 
-Entity = Literal["trip", "itinerary", "expense", "place", "member"]
+Entity = Literal["trip", "itinerary", "expense", "place", "member", "settlement"]
 Action = Literal["created", "updated", "deleted", "reordered", "joined"]
 
 # A slow consumer is told to resync rather than allowed to grow without bound.

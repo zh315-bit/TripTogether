@@ -2,8 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { ReactNode } from 'react'
 import * as authApi from '../api/auth'
 import { ApiError, apiFetch, apiStream } from '../api/client'
-import type { LoginRequest, User } from '../types/auth'
-import { tokenStorage } from './tokenStorage'
+import type { DemoMember, LoginRequest, User } from '../types/auth'
+import { DEMO_KEY, tokenStorage } from './tokenStorage'
 
 type AuthState =
   | { status: 'loading' | 'anonymous'; user: null }
@@ -13,6 +13,12 @@ type AuthState =
 type AuthContextValue = {
   state: AuthState
   login: (payload: LoginRequest, signal: AbortSignal) => Promise<void>
+  /**
+   * Signs in as a demo member. `onSignedIn` runs with the demo trip's id right
+   * before the session state changes, so the caller can navigate in the same
+   * render instead of racing the authenticated redirects.
+   */
+  loginDemo: (member: DemoMember, signal: AbortSignal, onSignedIn?: (tripId: number) => void) => Promise<number>
   logout: () => void
   restore: () => Promise<void>
   request: <T>(path: string, init?: RequestInit) => Promise<T>
@@ -31,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearSession = useCallback(() => {
     token.current = null
     try {
+      sessionStorage.removeItem(DEMO_KEY)
       tokenStorage.clear()
       setState(anonymous)
     } catch (error) {
@@ -40,8 +47,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     operation.current?.abort()
+    const refreshToken = tokenStorage.readRefresh()
+    // Revoke the server-side session too; the local one ends either way.
+    if (refreshToken) void authApi.logout(refreshToken).catch(() => undefined)
     clearSession()
   }, [clearSession])
+
+  // One refresh at a time: concurrent 401s share the exchange instead of each spending the token.
+  const refreshing = useRef<Promise<string> | null>(null)
+  const refreshSession = useCallback((): Promise<string> => {
+    if (refreshing.current) return refreshing.current
+    const refreshToken = tokenStorage.readRefresh()
+    if (!refreshToken) return Promise.reject(new ApiError(401, 'INVALID_CREDENTIALS', 'Please log in.'))
+    const exchange = (async () => {
+      const pair = await authApi.refresh(refreshToken)
+      tokenStorage.write(pair.access_token)
+      tokenStorage.writeRefresh(pair.refresh_token ?? null)
+      token.current = pair.access_token
+      return pair.access_token
+    })().finally(() => { refreshing.current = null })
+    refreshing.current = exchange
+    return exchange
+  }, [])
 
   const restore = useCallback(async () => {
     operation.current?.abort()
@@ -55,7 +82,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setState(anonymous)
         return
       }
-      const user = await authApi.getCurrentUser(saved, controller.signal)
+      let user: User
+      try {
+        user = await authApi.getCurrentUser(saved, controller.signal)
+      } catch (error) {
+        // An expired access token is routine: exchange the refresh token and look again.
+        if (!(error instanceof ApiError && error.status === 401) || !tokenStorage.readRefresh()) throw error
+        const renewed = await refreshSession()
+        user = await authApi.getCurrentUser(renewed, controller.signal)
+      }
       if (!controller.signal.aborted) setState({ status: 'authenticated', user })
     } catch (error) {
       if (controller.signal.aborted) return
@@ -68,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
       }
     }
-  }, [clearSession])
+  }, [clearSession, refreshSession])
 
   useEffect(() => {
     void restore()
@@ -84,12 +119,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await authApi.login(payload, combined)
       combined.throwIfAborted()
       tokenStorage.write(response.access_token)
+      tokenStorage.writeRefresh(response.refresh_token ?? null)
       token.current = response.access_token
       const user = await authApi.getCurrentUser(response.access_token, combined)
       combined.throwIfAborted()
       setState({ status: 'authenticated', user })
     } catch (error) {
       // An older request cannot clear a newer session or revive one after logout.
+      if (operation.current === controller && !controller.signal.aborted) clearSession()
+      throw error
+    }
+  }, [clearSession])
+
+  const loginDemo = useCallback(async (
+    member: DemoMember, signal: AbortSignal, onSignedIn?: (tripId: number) => void,
+  ) => {
+    operation.current?.abort()
+    const controller = new AbortController()
+    operation.current = controller
+    const combined = AbortSignal.any([controller.signal, signal])
+    try {
+      const response = await authApi.demoLogin(member, combined)
+      combined.throwIfAborted()
+      tokenStorage.write(response.access_token)
+      tokenStorage.writeRefresh(response.refresh_token ?? null)
+      sessionStorage.setItem(DEMO_KEY, response.member)
+      token.current = response.access_token
+      const user = await authApi.getCurrentUser(response.access_token, combined)
+      combined.throwIfAborted()
+      onSignedIn?.(response.trip_id)
+      setState({ status: 'authenticated', user })
+      return response.trip_id
+    } catch (error) {
       if (operation.current === controller && !controller.signal.aborted) clearSession()
       throw error
     }
@@ -102,13 +163,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       return await apiFetch<T>(path, { ...init, accessToken: credential })
     } catch (error) {
-      if (error instanceof ApiError && error.status === 401 &&
-        token.current === credential && operation.current === currentOperation) {
-        logout()
+      if (!(error instanceof ApiError && error.status === 401) ||
+        token.current !== credential || operation.current !== currentOperation) {
+        throw error
       }
+      if (tokenStorage.readRefresh()) {
+        // The access token expired mid-session: renew it once and retry the same request.
+        try {
+          const renewed = await refreshSession()
+          return await apiFetch<T>(path, { ...init, accessToken: renewed })
+        } catch (retryError) {
+          if (!(retryError instanceof ApiError && retryError.status === 401)) throw retryError
+        }
+      }
+      if (operation.current === currentOperation) logout()
       throw error
     }
-  }, [logout])
+  }, [logout, refreshSession])
 
   const stream = useCallback(async (path: string, signal: AbortSignal): Promise<Response> => {
     const credential = token.current
@@ -125,7 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [logout])
 
-  return <AuthContext.Provider value={{ state, login, logout, restore, request, stream }}>
+  return <AuthContext.Provider value={{ state, login, loginDemo, logout, restore, request, stream }}>
     {children}
   </AuthContext.Provider>
 }

@@ -20,12 +20,13 @@ const expense = {
 }
 const balance = {
   trip_id: 12, currency: 'USD',
-  members: [{ user_id: 1, username: 'Person1', paid: '100.00', share: '33.34', balance: '66.66' },
-    { user_id: 2, username: 'Person2', paid: '0.00', share: '33.33', balance: '-33.33' }],
+  members: [{ user_id: 1, username: 'Person1', paid: '100.00', share: '33.34', settled: '0.00', balance: '66.66' },
+    { user_id: 2, username: 'Person2', paid: '0.00', share: '33.33', settled: '0.00', balance: '-33.33' }],
   suggested_settlements: [{ from_user_id: 2, to_user_id: 1, amount: '33.33' }],
   settlement: { transfers: 1, unsettled_members: 2, minimal: true },
 }
-const json = (data: unknown) => new Response(JSON.stringify(data))
+const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status })
+const payments: unknown[] = []
 
 function mount(rows: unknown[] = [expense], ledger: unknown = balance) {
   const onChanged = vi.fn()
@@ -33,6 +34,10 @@ function mount(rows: unknown[] = [expense], ledger: unknown = balance) {
     if (url.endsWith('/me')) return json({ id: 2, username: 'Person2', email: 'p2@example.com', created_at: expense.created_at })
     if (url.endsWith('/members')) return json(members)
     if (url.endsWith('/balances')) return json(ledger)
+    if (url.endsWith('/settlements') && !init?.method) return json(payments)
+    if (url.endsWith('/settlements') && init?.method === 'POST') {
+      return json({ id: 9, trip_id: 12, ...JSON.parse(String(init.body)), note: null, recorded_by_user_id: 2, created_at: expense.created_at }, 201)
+    }
     if (init?.method === 'DELETE') return new Response(null, { status: 204 })
     if (init?.method) {
       const sent = JSON.parse(String(init.body)) as Record<string, unknown>
@@ -182,4 +187,15 @@ it('accepts signed server balances and rejects numeric money', async () => {
   await expect(getBalance(vi.fn().mockResolvedValue(balance), '12')).resolves.toEqual(balance)
   await expect(listExpenses(vi.fn().mockResolvedValue([{ ...expense, amount: 100 }]), '12'))
     .rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+})
+
+it('records a suggested transfer as paid and reloads the balances', async () => {
+  const { fetcher } = mount()
+  await userEvent.click(await screen.findByRole('button', { name: /Mark 33.33 USD from Person2 to Person1 as paid/ }))
+  const post = fetcher.mock.calls.find(([url, init]) => String(url).endsWith('/settlements') && init?.method === 'POST')
+  expect(JSON.parse(String(post?.[1]?.body))).toMatchObject({
+    from_user_id: 2, to_user_id: 1, amount: '33.33', currency: 'USD',
+  })
+  expect(JSON.parse(String(post?.[1]?.body)).paid_on).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  await waitFor(() => expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith('/balances')).length).toBeGreaterThanOrEqual(2))
 })

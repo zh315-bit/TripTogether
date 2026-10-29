@@ -51,7 +51,31 @@ export type MemberBalance = {
   username: string
   paid: string
   share: string
+  /** Net of recorded payments: positive when the member paid others more than they received. */
+  settled: string
   balance: string
+}
+
+export type Settlement = {
+  id: number
+  trip_id: number
+  from_user_id: number
+  to_user_id: number
+  amount: string
+  currency: string
+  paid_on: string
+  note: string | null
+  recorded_by_user_id: number
+  created_at: string
+}
+
+export type SettlementInput = {
+  from_user_id: number
+  to_user_id: number
+  amount: string
+  currency: string
+  paid_on: string
+  note?: string
 }
 
 export type SettlementSuggestion = {

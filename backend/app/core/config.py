@@ -140,7 +140,7 @@ def get_geocoder_settings(environment: Optional[str] = None) -> GeocoderSettings
 
 # Login and registration are the brute-force targets; everything else sits
 # behind a Bearer token. Rules are "<requests>/<seconds>" or "off".
-RATE_LIMIT_DEFAULTS = {"login": "10/60", "register": "5/60"}
+RATE_LIMIT_DEFAULTS = {"login": "10/60", "register": "5/60", "reset": "5/60"}
 
 
 def get_rate_limit_rule(name: str) -> Optional[str]:
@@ -153,3 +153,16 @@ def trust_proxy_headers(environment: Optional[str] = None) -> bool:
     environment = environment or _get_setting("APP_ENV", "development")
     value = _get_setting("TRUST_PROXY_HEADERS", "1" if environment == "production" else "0")
     return str(value).strip().lower() in ("1", "true", "yes")
+
+
+def password_reset_url(token: str) -> str:
+    """Where a reset mail sends the user. PASSWORD_RESET_URL holds a {token} placeholder;
+    the default points at the first CORS origin, or the local Vite server."""
+    template = _get_setting("PASSWORD_RESET_URL")
+    if not template:
+        origins = get_app_settings().cors_origins
+        base = origins[0] if origins else "http://127.0.0.1:5173"
+        template = base.rstrip("/") + "/reset-password?token={token}"
+    if "{token}" not in template:
+        raise ValueError("PASSWORD_RESET_URL must contain {token}.")
+    return template.replace("{token}", token)
